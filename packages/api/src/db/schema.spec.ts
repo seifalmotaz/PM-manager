@@ -4,7 +4,7 @@ import { drizzle } from 'drizzle-orm/postgres-js'
 import { migrate } from 'drizzle-orm/postgres-js/migrator'
 
 // Admin connection (to create/drop test database)
-const adminSql = postgres('postgres://localhost:5432/postgres', { max: 1 })
+const adminSql = postgres('postgres://postgres:password@localhost:5432/postgres', { max: 1 })
 
 // Test database connection (set in beforeAll)
 let testSql: ReturnType<typeof postgres>
@@ -16,7 +16,7 @@ describe('Database Schema', () => {
     await adminSql.unsafe(`CREATE DATABASE saha_test`)
     // Close admin connection, open test connection
     await adminSql.end()
-    testSql = postgres('postgres://localhost:5432/saha_test', { max: 1 })
+    testSql = postgres('postgres://postgres:password@localhost:5432/saha_test', { max: 1 })
     // Apply migrations using Drizzle's migrate function
     // Note: Bun test runs from project root, so we use workspace-relative path
     const testDb = drizzle(testSql)
@@ -25,7 +25,7 @@ describe('Database Schema', () => {
 
   afterAll(async () => {
     await testSql.end()
-    const adminSql2 = postgres('postgres://localhost:5432/postgres', { max: 1 })
+    const adminSql2 = postgres('postgres://postgres:password@localhost:5432/postgres', { max: 1 })
     await adminSql2.unsafe(`DROP DATABASE IF EXISTS saha_test`)
     await adminSql2.end()
   })
