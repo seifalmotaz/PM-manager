@@ -16,6 +16,7 @@
         "@elysiajs/cors": "latest",
         "@elysiajs/eden": "latest",
         "@elysiajs/swagger": "latest",
+        "@sinclair/typebox": "^0.34.49",
         "@workos-inc/node": "latest",
         "drizzle-orm": "latest",
         "elysia": "latest",
@@ -30,12 +31,16 @@
     "packages/shared": {
       "name": "shared",
       "version": "0.1.0",
+      "dependencies": {
+        "@sinclair/typebox": "^0.34.49",
+      },
     },
     "packages/web": {
       "name": "web",
       "version": "0.1.0",
       "dependencies": {
         "@elysiajs/eden": "^1.4.9",
+        "@neodrag/svelte": "^2.3.3",
         "api": "workspace:*",
         "shared": "workspace:*",
       },
@@ -135,6 +140,8 @@
     "@jridgewell/trace-mapping": ["@jridgewell/trace-mapping@0.3.31", "", { "dependencies": { "@jridgewell/resolve-uri": "^3.1.0", "@jridgewell/sourcemap-codec": "^1.4.14" } }, "sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw=="],
 
     "@napi-rs/wasm-runtime": ["@napi-rs/wasm-runtime@1.1.4", "", { "dependencies": { "@tybys/wasm-util": "^0.10.1" }, "peerDependencies": { "@emnapi/core": "^1.7.1", "@emnapi/runtime": "^1.7.1" } }, "sha512-3NQNNgA1YSlJb/kMH1ildASP9HW7/7kYnRI2szWJaofaS1hWmbGI4H+d3+22aGzXXN9IJ+n+GiFVcGipJP18ow=="],
+
+    "@neodrag/svelte": ["@neodrag/svelte@2.3.3", "", { "peerDependencies": { "svelte": "^3.0.0 || ^4.0.0 || ^5.0.0" } }, "sha512-avXzhrilsBsnMFljhVAQ7h+6hbSIrvRCJ61GCiGbGISkC1QOhjDCNvPZo2+7KVwiYrnUBx4NRH0kTIqrcxv9Lg=="],
 
     "@oxc-project/types": ["@oxc-project/types@0.129.0", "", {}, "sha512-3oz8m3FGdr2nDXVqmFUw7jolKliC4MoyXYIG2c7gpjBnzUWQpUGIYcXYKxTdTi+N2jusvt610ckTMkxdwHkYEg=="],
 

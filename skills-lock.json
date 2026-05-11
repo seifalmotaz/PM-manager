@@ -7,6 +7,12 @@
       "skillPath": "skills/brainstorming/SKILL.md",
       "computedHash": "8df9b47092524833138b58682d03f2e153a242e550d1693657afdbee0cc9cdb0"
     },
+    "execute-spec": {
+      "source": "nicknisi/claude-plugins",
+      "sourceType": "github",
+      "skillPath": "plugins/ideation/skills/execute-spec/SKILL.md",
+      "computedHash": "c9594f3937fb562189015955f0ddccec9d150f836010274d80763c127aa05a33"
+    },
     "ideation": {
       "source": "nicknisi/claude-plugins",
       "sourceType": "github",
