@@ -1,0 +1,1 @@
+CREATE INDEX "employee_capacity_sprint_id_idx" ON "employee_capacity" USING btree ("sprint_id");

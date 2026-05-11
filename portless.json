@@ -1,0 +1,10 @@
+{
+  "apps": {
+    "packages/web": {
+      "name": "saha"
+    },
+    "packages/api": {
+      "name": "api.saha"
+    }
+  }
+}
