@@ -7,20 +7,17 @@
   "scripts": {
     "dev": "bun --env-file=../../.env run --watch src/index.ts",
     "build": "echo 'build placeholder'",
-    "db:generate": "bun --env-file=../../.env x drizzle-kit generate",
-    "db:migrate": "bun --env-file=../../.env run src/db/migrate.ts",
-    "db:seed": "bun --env-file=../../.env run src/db/seed.ts",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "bun run src/db/migrate.ts",
+    "db:seed": "bun run src/db/seed.ts",
     "typecheck": "tsc --noEmit",
-    "test": "bun test",
-    "envtest": "console.log('DB_URL:', process.env.DATABASE_URL)",
-    "testenv": "bun test.ts"
+    "test": "bun test"
   },
   "dependencies": {
     "@elysiajs/cors": "latest",
     "@elysiajs/eden": "latest",
     "@elysiajs/swagger": "latest",
     "@workos-inc/node": "latest",
-    "dotenv": "^17.4.2",
     "drizzle-orm": "latest",
     "elysia": "latest",
     "postgres": "latest",

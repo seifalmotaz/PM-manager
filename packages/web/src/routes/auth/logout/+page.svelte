@@ -1,10 +1,11 @@
 <script>
   import { onMount } from 'svelte'
   import { goto } from '$app/navigation'
+  import { PUBLIC_API_URL } from '$env/static/public'
 
   onMount(async () => {
     try {
-      await fetch('http://localhost:3000/auth/logout', {
+      await fetch(`${PUBLIC_API_URL}/auth/logout`, {
         method: 'POST',
         credentials: 'include',
       })

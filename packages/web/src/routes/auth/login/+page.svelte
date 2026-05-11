@@ -1,7 +1,8 @@
 <script>
-  // The login page redirects the user to WorkOS for authentication
+  import { PUBLIC_API_URL } from '$env/static/public'
+
   function handleLogin() {
-    window.location.href = "https://api.saha.localhost/auth/login";
+    window.location.href = `${PUBLIC_API_URL}/auth/login`
   }
 </script>
 
