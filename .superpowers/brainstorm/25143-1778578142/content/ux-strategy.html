@@ -1,0 +1,41 @@
+<h2>Fast & Reliable UX Strategy</h2>
+<p class="subtitle">Focusing on "speed at every touch" to match the Todoist experience.</p>
+
+<div class="options" data-multiselect>
+  <div class="option" data-choice="commandk" onclick="toggleSelect(this)">
+    <div class="letter">1</div>
+    <div class="content">
+      <h3>Universal Command Palette (CMD+K)</h3>
+      <p>Instant navigation and task creation. Type "/" for actions, "@" for people, "#" for projects. Never take your hands off the keyboard.</p>
+    </div>
+  </div>
+
+  <div class="option" data-choice="optimistic" onclick="toggleSelect(this)">
+    <div class="letter">2</div>
+    <div class="content">
+      <h3>Optimistic UI & Skeleton States</h3>
+      <p>Actions (moving tasks, changing priority) happen instantly on screen before the server confirms. "Zero latency" perception.</p>
+    </div>
+  </div>
+
+  <div class="option" data-choice="shortcuts" onclick="toggleSelect(this)">
+    <div class="letter">3</div>
+    <div class="content">
+      <h3>Global Keyboard Shortcuts</h3>
+      <p>"Q" for quick-add, "S" for search, "1-4" for sidebar navigation. Familiar patterns for Todoist/Linear power users.</p>
+    </div>
+  </div>
+
+  <div class="option" data-choice="contextual" onclick="toggleSelect(this)">
+    <div class="letter">4</div>
+    <div class="content">
+      <h3>Contextual Power-Actions</h3>
+      <p>Keep cards clean. Reveal "Move", "Assign", "Due Date" on hover or right-click. Maintains Todoist simplicity with Jira power.</p>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Performance Mandate</h3>
+  <p>We'll target sub-100ms response times for all UI transitions. Using Svelte 5's runes for fine-grained reactivity and minimal re-renders.</p>
+</div>

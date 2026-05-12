@@ -1,0 +1,39 @@
+<h2>Choose a Core Layout Direction</h2>
+<p class="subtitle">Both options maintain our privacy mandate (hiding sensitive names by default) while upgrading the "Enterprise" feel.</p>
+
+<div class="options">
+  <div class="option" data-choice="manager" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>The Manager's Cockpit</h3>
+      <p>Optimized for visibility across many projects. Three-pane layout: Navigation, List/Board, and Detail. High information density for PMs.</p>
+      <div class="mockup" style="margin-top: 1rem; border: 1px dashed #ccc; padding: 10px; opacity: 0.7;">
+        <div class="mock-nav" style="background: #f1f5f9; height: 20px; margin-bottom: 5px;"></div>
+        <div style="display: flex; gap: 5px; height: 100px;">
+          <div class="mock-sidebar" style="width: 20%; background: #e2e8f0;"></div>
+          <div class="mock-content" style="flex: 1; background: #fff; border: 1px solid #e2e8f0;"></div>
+          <div style="width: 30%; background: #f8fafc; border: 1px solid #e2e8f0;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="focus" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>The Personal Focus</h3>
+      <p>Clean, centered experience inspired by Todoist. Minimizes distractions, maximizes focus on the current task list. Sidebar is collapsible to a "Ghost" state.</p>
+      <div class="mockup" style="margin-top: 1rem; border: 1px dashed #ccc; padding: 10px; opacity: 0.7;">
+        <div class="mock-nav" style="background: #f1f5f9; height: 20px; margin-bottom: 5px;"></div>
+        <div style="display: flex; justify-content: center; height: 100px;">
+          <div class="mock-content" style="width: 60%; background: #fff; border: 1px solid #e2e8f0;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Key UX Improvement: Unified Search & Command Bar</h3>
+  <p>Regardless of layout, we'll introduce a CMD+K palette that combines Todoist's fast capture with Jira's powerful search. Type "Fix bug today @me p0" to create, or search for anything.</p>
+</div>

@@ -1,6 +1,8 @@
 <script lang="ts">
   import type { TaskSummary } from '$lib/stores/tasks'
   import TaskCard from './TaskCard.svelte'
+  import { MoreHorizontal, Plus } from 'lucide-svelte'
+  import { clsx } from 'clsx'
 
   interface DragState {
     active: boolean
@@ -49,11 +51,11 @@
     clone.style.top = `${rect.top}px`
     clone.style.width = `${rect.width}px`
     clone.style.pointerEvents = 'none'
-    clone.style.opacity = '0.85'
+    clone.style.opacity = '0.9'
     clone.style.zIndex = '9999'
-    clone.style.boxShadow = '0 4px 16px rgba(0, 0, 0, 0.15)'
-    clone.style.borderRadius = '0.5rem'
-    clone.style.transform = 'rotate(2deg)'
+    clone.style.boxShadow = '0 8px 24px rgba(0, 0, 0, 0.2)'
+    clone.style.borderRadius = 'var(--radius-md)'
+    clone.style.transform = 'rotate(1deg)'
     document.body.appendChild(clone)
 
     dragState = {
@@ -72,7 +74,6 @@
     dragState.cloneEl.style.left = `${e.clientX - dragState.offsetX}px`
     dragState.cloneEl.style.top = `${e.clientY - dragState.offsetY}px`
 
-    // Hit-test to find the column under the pointer
     const els = document.elementsFromPoint(e.clientX, e.clientY)
     let foundStatus: string | null = null
     for (const el of els) {
@@ -88,12 +89,10 @@
   async function handlePointerUp(e: PointerEvent) {
     if (!dragState.active || !dragState.taskId) return
 
-    // Clean up clone
     if (dragState.cloneEl) {
       dragState.cloneEl.remove()
     }
 
-    // If dropped on a different column, trigger the status change
     const task = tasks.find(t => t.id === dragState.taskId)
     if (task && hoveredStatus && hoveredStatus !== task.status) {
       await onDrop(dragState.taskId, hoveredStatus)
@@ -110,13 +109,24 @@
 />
 
 <div
-  class={['kanban-column', isDropTarget ? 'drop-target' : '']}
+  class={clsx('kanban-column', isDropTarget && 'drop-target')}
   data-column-status={status}
 >
   <div class="column-header">
-    <h3 class="column-title">{title}</h3>
-    <span class="task-count">{tasks.length}</span>
+    <div class="header-left">
+      <h3 class="column-title">{title}</h3>
+      <span class="task-count">{tasks.length}</span>
+    </div>
+    <div class="header-actions">
+      <button class="icon-btn" title="Quick Add Task">
+        <Plus size={16} />
+      </button>
+      <button class="icon-btn" title="Column Options">
+        <MoreHorizontal size={16} />
+      </button>
+    </div>
   </div>
+
   <div class="column-body">
     {#each tasks as task (task.id)}
       <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -128,8 +138,11 @@
         <TaskCard task={task} onclick={() => onTaskClick(task)} />
       </div>
     {/each}
+    
     {#if tasks.length === 0}
-      <p class="empty-column">No tasks</p>
+      <div class="empty-state">
+        <p>No tasks yet</p>
+      </div>
     {/if}
   </div>
 </div>
@@ -138,58 +151,105 @@
   .kanban-column {
     display: flex;
     flex-direction: column;
-    background: var(--color-bg-subtle, #f7fafc);
-    border-radius: 0.75rem;
-    border: 2px solid transparent;
-    transition: border-color 0.15s ease, background 0.15s ease;
-    min-height: 200px;
+    background-color: var(--zinc-900);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border-muted);
+    transition: all 0.2s ease;
+    min-width: 280px;
+    max-width: 350px;
+    height: 100%;
   }
+
   .kanban-column.drop-target {
-    border-color: var(--color-primary, #3b82f6);
-    background: var(--color-primary-light, #eff6ff);
+    border-color: var(--brand-primary);
+    background-color: var(--zinc-800);
+    transform: scale(1.01);
   }
+
   .column-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0.75rem 1rem;
-    border-bottom: 1px solid var(--color-border, #e2e8f0);
+    padding: 0.875rem 1rem;
+    border-bottom: 1px solid var(--border-muted);
   }
+
+  .header-left {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
   .column-title {
     font-size: 0.875rem;
-    font-weight: 700;
-    color: var(--color-text, #1a202c);
-    margin: 0;
+    font-weight: 600;
+    color: var(--text-main);
+    letter-spacing: -0.01em;
   }
+
   .task-count {
     font-size: 0.75rem;
-    font-weight: 600;
-    color: var(--color-muted, #718096);
-    background: var(--color-surface, #fff);
-    border: 1px solid var(--color-border, #e2e8f0);
+    font-weight: 500;
+    color: var(--text-muted);
+    background-color: var(--zinc-800);
+    padding: 1px 8px;
     border-radius: 999px;
-    padding: 0 0.5rem;
-    line-height: 1.5;
   }
+
+  .header-actions {
+    display: flex;
+    gap: 0.25rem;
+  }
+
+  .icon-btn {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    border-radius: 4px;
+    transition: all 0.15s;
+  }
+
+  .icon-btn:hover {
+    background-color: var(--zinc-800);
+    color: var(--text-main);
+  }
+
   .column-body {
     flex: 1;
     padding: 0.75rem;
     display: flex;
     flex-direction: column;
-    gap: 0.625rem;
+    gap: 0.75rem;
+    overflow-y: auto;
+    scrollbar-width: thin;
   }
+
   .card-wrapper {
-    touch-action: none;
     cursor: grab;
+    transition: transform 0.1s;
   }
+
   .card-wrapper:active {
     cursor: grabbing;
+    transform: scale(0.98);
   }
-  .empty-column {
+
+  .empty-state {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px dashed var(--border-main);
+    border-radius: var(--radius-md);
+    margin: 0.5rem 0;
+    min-height: 80px;
+  }
+
+  .empty-state p {
     font-size: 0.8125rem;
-    color: var(--color-muted, #718096);
-    text-align: center;
-    padding: 2rem 0;
-    margin: 0;
+    color: var(--text-muted);
   }
 </style>

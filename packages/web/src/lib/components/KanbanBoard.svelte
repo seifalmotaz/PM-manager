@@ -35,24 +35,40 @@
   ]
 </script>
 
-<div class="kanban-board">
-  {#each columns as column (column.id)}
-    <KanbanColumn
-      title={column.label}
-      tasks={tasksByColumn[column.id]}
-      status={column.id}
-      onDrop={(taskId, targetStatus) => onStatusChange(taskId, targetStatus)}
-      onTaskClick={onTaskClick}
-    />
-  {/each}
+<div class="kanban-board-container">
+  <div class="kanban-board">
+    {#each columns as column (column.id)}
+      <KanbanColumn
+        title={column.label}
+        tasks={tasksByColumn[column.id]}
+        status={column.id}
+        onDrop={(taskId, targetStatus) => onStatusChange(taskId, targetStatus)}
+        onTaskClick={onTaskClick}
+      />
+    {/each}
+  </div>
 </div>
 
 <style>
+  .kanban-board-container {
+    height: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 1rem; /* Space for scrollbar */
+    scrollbar-width: thin;
+  }
+
   .kanban-board {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 1rem;
+    display: flex;
+    gap: 1.25rem;
+    height: 100%;
     min-height: calc(100vh - 120px);
-    padding: 0.5rem 0;
+    padding: 0.5rem;
+  }
+
+  @media (min-width: 1440px) {
+    .kanban-board {
+      justify-content: flex-start;
+    }
   }
 </style>

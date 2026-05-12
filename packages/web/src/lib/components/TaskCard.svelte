@@ -1,5 +1,7 @@
 <script lang="ts">
   import type { TaskSummary } from '$lib/stores/tasks'
+  import { Clock, Calendar, MessageSquare, MoreVertical } from 'lucide-svelte'
+  import { clsx } from 'clsx'
 
   let {
     task,
@@ -11,12 +13,12 @@
 
   function priorityColor(priority: string): string {
     const colors: Record<string, string> = {
-      p0: '#ef4444',
-      p1: '#f97316',
-      p2: '#eab308',
-      p3: '#9ca3af',
+      p0: '#ef4444', // Red 500
+      p1: '#f97316', // Orange 500
+      p2: '#eab308', // Yellow 500
+      p3: '#71717a', // Zinc 500
     }
-    return colors[priority.toLowerCase()] ?? '#9ca3af'
+    return colors[priority.toLowerCase()] ?? '#71717a'
   }
 
   function formatDueDate(dueDate: string): string {
@@ -63,103 +65,168 @@
 </script>
 
 <div
-  class={['task-card', isDeadlinePast ? 'deadline-past' : '']}
+  class={clsx('task-card', isDeadlinePast && 'deadline-past')}
   role="button"
   tabindex="0"
   onclick={onclick}
   onkeydown={handleKeydown}
 >
-  <div class="card-header">
-    <span class="card-title">{task.title}</span>
-    {#if task.priority}
-      <span class="priority-badge" style="background: {priorityColor(task.priority)}">
-        {task.priority.toUpperCase()}
-      </span>
-    {/if}
-  </div>
-  <div class="card-meta">
-    {#if task.project?.name}
-      <span class="project-label">{task.project.name}</span>
-    {/if}
-    {#if task.dueDate}
-      <span class={['due-date', isOverdue ? 'overdue' : '']}>
-        {formatDueDate(task.dueDate)}
-      </span>
-    {/if}
-  </div>
-  <div class="card-footer">
-    <span class="dwell-time">{formatDwellTime(task)}</span>
+  <div class="priority-indicator" style:--p-color={priorityColor(task.priority ?? 'p3')}></div>
+  
+  <div class="card-content">
+    <div class="card-header">
+      <span class="task-title">{task.title}</span>
+      <button class="more-btn" aria-label="Task options">
+        <MoreVertical size={14} />
+      </button>
+    </div>
+
+    <div class="card-meta">
+      {#if task.project?.name}
+        <span class="project-tag">{task.project.name}</span>
+      {/if}
+      
+      {#if task.dueDate}
+        <div class={clsx('meta-item', isOverdue && 'overdue')}>
+          <Calendar size={12} />
+          <span>{formatDueDate(task.dueDate)}</span>
+        </div>
+      {/if}
+
+      <div class="meta-item dwell">
+        <Clock size={12} />
+        <span>{formatDwellTime(task)}</span>
+      </div>
+
+      <!-- Placeholder for comments/attachments -->
+      <div class="meta-item-group">
+        <div class="meta-item">
+          <MessageSquare size={12} />
+          <span>2</span>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
 <style>
   .task-card {
-    background: var(--color-surface, #fff);
-    border: 1px solid var(--color-border, #e2e8f0);
-    border-radius: 0.5rem;
+    position: relative;
+    background-color: var(--bg-surface);
+    border: 1px solid var(--border-main);
+    border-radius: var(--radius-md);
     padding: 0.75rem;
+    padding-left: 1rem;
     cursor: pointer;
-    transition: box-shadow 0.15s ease, border-color 0.15s ease;
-    user-select: none;
-    -webkit-user-select: none;
+    transition: all 0.15s ease;
+    display: flex;
+    gap: 0.75rem;
+    overflow: hidden;
   }
+
   .task-card:hover {
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-    border-color: var(--color-primary, #3b82f6);
+    border-color: var(--zinc-600);
+    background-color: var(--bg-surface-hover);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
   }
+
+  .priority-indicator {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background-color: var(--p-color);
+  }
+
   .task-card.deadline-past {
-    border-left: 3px solid #ef4444;
+    border-color: #ef4444;
+    background-color: rgba(239, 68, 68, 0.05);
   }
+
+  .card-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    min-width: 0;
+  }
+
   .card-header {
     display: flex;
-    align-items: flex-start;
     justify-content: space-between;
+    align-items: flex-start;
     gap: 0.5rem;
-    margin-bottom: 0.5rem;
   }
-  .card-title {
+
+  .task-title {
     font-size: 0.875rem;
-    font-weight: 600;
-    color: var(--color-text, #1a202c);
-    line-height: 1.3;
-    word-break: break-word;
+    font-weight: 500;
+    color: var(--text-main);
+    line-height: 1.4;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
   }
-  .priority-badge {
-    display: inline-flex;
-    align-items: center;
-    padding: 1px 6px;
-    border-radius: 999px;
-    font-size: 0.625rem;
-    font-weight: 700;
-    color: #fff;
-    white-space: nowrap;
-    flex-shrink: 0;
+
+  .more-btn {
+    opacity: 0;
+    color: var(--text-muted);
+    transition: opacity 0.15s;
+    padding: 2px;
+    border-radius: 4px;
   }
+
+  .task-card:hover .more-btn {
+    opacity: 1;
+  }
+
+  .more-btn:hover {
+    background-color: var(--zinc-700);
+    color: var(--text-main);
+  }
+
   .card-meta {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    margin-bottom: 0.375rem;
+    gap: 0.75rem;
     flex-wrap: wrap;
   }
-  .project-label {
-    font-size: 0.75rem;
-    color: var(--color-muted, #718096);
+
+  .project-tag {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.025em;
+    background-color: var(--zinc-800);
+    padding: 1px 6px;
+    border-radius: 4px;
   }
-  .due-date {
+
+  .meta-item {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
     font-size: 0.75rem;
-    color: var(--color-muted, #718096);
+    color: var(--text-muted);
   }
-  .due-date.overdue {
+
+  .meta-item.overdue {
     color: #ef4444;
     font-weight: 600;
   }
-  .card-footer {
+
+  .meta-item-group {
+    margin-left: auto;
     display: flex;
-    align-items: center;
+    gap: 0.5rem;
   }
-  .dwell-time {
+
+  .dwell {
     font-size: 0.6875rem;
-    color: var(--color-muted, #718096);
+    opacity: 0.8;
   }
 </style>
