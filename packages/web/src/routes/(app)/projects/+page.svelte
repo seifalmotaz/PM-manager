@@ -1,44 +1,47 @@
 <script lang="ts">
-  import { workspaces, fetchWorkspaces } from '$lib/stores/workspaces'
   import { trpc } from '$lib/trpc'
+  import { Plus, Hash, FolderKanban } from 'lucide-svelte'
+  import { clsx } from 'clsx'
 
   let projectsByWorkspace = $state<Record<string, { workspace: { id: string; name: string; slug: string; type: string; memberCount: number }; projects: any[] }>>({})
   let isLoading = $state(true)
   let showCreateForm = $state(false)
+  
   let newProjectName = $state('')
   let newProjectDesc = $state('')
-  let newProjectColor = $state('#6366f1')
+  let newProjectColor = $state('#db4c3f')
   let selectedWorkspaceId = $state('')
   let isCreating = $state(false)
 
-  $effect(() => {
-    async function load() {
-      isLoading = true
-      try {
-        const projects = await trpc.project.list.query({})
-        const wsList = await trpc.workspace.list.query()
+  async function loadProjects() {
+    isLoading = true
+    try {
+      const projects = await trpc.project.list.query({})
+      const wsList = await trpc.workspace.list.query()
 
-        const grouped: Record<string, any> = {}
-        for (const ws of wsList as any[]) {
-          grouped[ws.id] = { workspace: ws, projects: [] }
-        }
-        for (const proj of projects as any[]) {
-          if (grouped[proj.workspaceId]) {
-            grouped[proj.workspaceId].projects.push(proj)
-          }
-        }
-        projectsByWorkspace = grouped
-
-        if (selectedWorkspaceId === '' && wsList.length > 0) {
-          selectedWorkspaceId = (wsList[0] as any).id
-        }
-      } catch (err) {
-        console.error('Failed to load projects:', err)
-      } finally {
-        isLoading = false
+      const grouped: Record<string, any> = {}
+      for (const ws of wsList as any[]) {
+        grouped[ws.id] = { workspace: ws, projects: [] }
       }
+      for (const proj of projects as any[]) {
+        if (grouped[proj.workspaceId]) {
+          grouped[proj.workspaceId].projects.push(proj)
+        }
+      }
+      projectsByWorkspace = grouped
+
+      if (selectedWorkspaceId === '' && wsList.length > 0) {
+        selectedWorkspaceId = (wsList[0] as any).id
+      }
+    } catch (err) {
+      console.error('Failed to load projects:', err)
+    } finally {
+      isLoading = false
     }
-    load()
+  }
+
+  $effect(() => {
+    loadProjects()
   })
 
   async function handleCreate() {
@@ -54,18 +57,7 @@
       newProjectName = ''
       newProjectDesc = ''
       showCreateForm = false
-      const projects = await trpc.project.list.query({})
-      const wsList = await trpc.workspace.list.query()
-      const grouped: Record<string, any> = {}
-      for (const ws of wsList as any[]) {
-        grouped[ws.id] = { workspace: ws, projects: [] }
-      }
-      for (const proj of projects as any[]) {
-        if (grouped[proj.workspaceId]) {
-          grouped[proj.workspaceId].projects.push(proj)
-        }
-      }
-      projectsByWorkspace = grouped
+      await loadProjects()
     } catch (err) {
       console.error('Failed to create project:', err)
     } finally {
@@ -75,188 +67,281 @@
 </script>
 
 <div class="projects-page">
-  <div class="page-header">
-    <h1>Projects</h1>
-    <button class="btn-primary" onclick={() => (showCreateForm = !showCreateForm)}>
-      {showCreateForm ? 'Cancel' : '+ Create Project'}
-    </button>
-  </div>
+  <div class="centered-well">
+    <header class="page-header">
+      <div class="header-main">
+        <h1 class="page-title">Projects</h1>
+      </div>
+      
+      <div class="header-actions">
+        <button class="add-project-btn" onclick={() => (showCreateForm = !showCreateForm)}>
+          <Plus size={16} />
+          <span>{showCreateForm ? 'Cancel' : 'Add Project'}</span>
+        </button>
+      </div>
+    </header>
 
-  {#if showCreateForm}
-    <div class="create-form">
-      <select bind:value={selectedWorkspaceId} required>
-        <option value="">Select workspace...</option>
-        {#each Object.values(projectsByWorkspace) as { workspace } (workspace.id)}
-          <option value={workspace.id}>{workspace.name}</option>
-        {/each}
-      </select>
-      <input type="text" bind:value={newProjectName} placeholder="Project name" required />
-      <input type="text" bind:value={newProjectDesc} placeholder="Description (optional)" />
-      <input type="color" bind:value={newProjectColor} />
-      <button class="btn-primary" onclick={handleCreate} disabled={isCreating || !newProjectName.trim() || !selectedWorkspaceId}>
-        {isCreating ? 'Creating...' : 'Create'}
-      </button>
-    </div>
-  {/if}
-
-  {#if isLoading}
-    <p class="loading">Loading projects...</p>
-  {:else}
-    {#each Object.values(projectsByWorkspace) as { workspace, projects } (workspace.id)}
-      <section class="workspace-group">
-        <h2 class="workspace-name">{workspace.name}</h2>
-        <div class="project-grid">
-          {#each projects as project (project.id)}
-            <a href="/project/{project.id}/kanban" class="project-card">
-              <div class="project-color" style="background: {project.color || '#6366f1'}"></div>
-              <div class="project-info">
-                <h3 class="project-name">{project.name}</h3>
-                {#if project.description}
-                  <p class="project-desc">{project.description}</p>
-                {/if}
-              </div>
-            </a>
-          {/each}
-          {#if projects.length === 0}
-            <p class="empty-workspace">No projects yet</p>
-          {/if}
+    {#if showCreateForm}
+      <div class="create-form-container">
+        <div class="form-row">
+          <select bind:value={selectedWorkspaceId} required class="td-input">
+            <option value="">Select workspace...</option>
+            {#each Object.values(projectsByWorkspace) as { workspace } (workspace.id)}
+              <option value={workspace.id}>{workspace.name}</option>
+            {/each}
+          </select>
+          <input type="text" class="td-input flex-1" bind:value={newProjectName} placeholder="Project name" required />
+          <input type="color" class="color-picker" bind:value={newProjectColor} title="Project Color" />
         </div>
-      </section>
-    {/each}
-  {/if}
+        <div class="form-row">
+          <input type="text" class="td-input flex-1" bind:value={newProjectDesc} placeholder="Description (optional)" />
+          <button class="submit-btn" onclick={handleCreate} disabled={isCreating || !newProjectName.trim() || !selectedWorkspaceId}>
+            {isCreating ? 'Creating...' : 'Add Project'}
+          </button>
+        </div>
+      </div>
+    {/if}
+
+    <div class="page-content">
+      {#if isLoading}
+        <div class="status-container">
+          <div class="spinner"></div>
+          <p>Loading projects...</p>
+        </div>
+      {:else}
+        {#each Object.values(projectsByWorkspace) as { workspace, projects } (workspace.id)}
+          <section class="workspace-section">
+            <h2 class="workspace-title">{workspace.name}</h2>
+            <div class="project-list">
+              {#each projects as project (project.id)}
+                <a href="/project/{project.id}/kanban" class="project-list-item">
+                  <div class="project-icon" style:color={project.color || '#db4c3f'}>
+                    <Hash size={18} />
+                  </div>
+                  <div class="project-details">
+                    <span class="project-name">{project.name}</span>
+                    {#if project.description}
+                      <span class="project-desc">{project.description}</span>
+                    {/if}
+                  </div>
+                </a>
+              {/each}
+              {#if projects.length === 0}
+                <div class="empty-state">
+                  <FolderKanban size={24} class="empty-icon" />
+                  <p>No projects in this workspace</p>
+                </div>
+              {/if}
+            </div>
+          </section>
+        {/each}
+      {/if}
+    </div>
+  </div>
 </div>
 
 <style>
   .projects-page {
-    padding: 1rem;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    padding-top: 1.5rem;
   }
+
   .page-header {
     display: flex;
-    align-items: center;
     justify-content: space-between;
-    margin-bottom: 1.5rem;
+    align-items: flex-end;
+    margin-bottom: 2.5rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--border-main);
   }
-  .page-header h1 {
+
+  .page-title {
     font-size: 1.5rem;
     font-weight: 700;
+    letter-spacing: -0.01em;
+    color: var(--text-main);
+    line-height: 1.2;
     margin: 0;
   }
-  .btn-primary {
-    padding: 0.5rem 1rem;
-    border: none;
-    border-radius: 0.5rem;
-    font-size: 0.8125rem;
-    font-weight: 600;
-    cursor: pointer;
-    background: var(--color-primary, #3b82f6);
-    color: #fff;
-    transition: background 0.15s ease;
-  }
-  .btn-primary:hover:not(:disabled) {
-    background: var(--color-primary-dark, #2563eb);
-  }
-  .btn-primary:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-  .create-form {
+
+  .add-project-btn {
     display: flex;
-    flex-wrap: wrap;
+    align-items: center;
     gap: 0.5rem;
-    align-items: flex-end;
-    padding: 1rem;
-    margin-bottom: 1.5rem;
-    border: 1px solid var(--color-border, #e2e8f0);
-    border-radius: 0.5rem;
-    background: var(--color-surface, #fff);
+    color: var(--brand-primary);
+    font-weight: 600;
+    font-size: 0.875rem;
+    padding: 0.5rem 0;
+    transition: color 0.15s;
   }
-  .create-form select,
-  .create-form input[type="text"] {
-    padding: 0.5rem 0.75rem;
-    border: 1px solid var(--color-border, #e2e8f0);
-    border-radius: 0.375rem;
-    font-size: 0.8125rem;
-    color: var(--color-text, #1a202c);
-    background: var(--color-bg, #fff);
+
+  .add-project-btn:hover {
+    color: var(--brand-hover);
   }
-  .create-form select:focus,
-  .create-form input[type="text"]:focus {
+
+  .create-form-container {
+    background-color: var(--bg-surface);
+    border: 1px solid var(--border-main);
+    border-radius: var(--radius-lg);
+    padding: 1.25rem;
+    margin-bottom: 2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .form-row {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+  }
+
+  .flex-1 {
+    flex: 1;
+  }
+
+  .td-input {
+    background-color: var(--bg-app);
+    border: 1px solid var(--border-main);
+    color: var(--text-main);
+    border-radius: var(--radius-md);
+    padding: 0.625rem 0.75rem;
+    font-size: 0.875rem;
+    transition: border-color 0.15s;
+  }
+
+  .td-input:focus {
+    border-color: var(--brand-primary);
     outline: none;
-    border-color: var(--color-primary, #3b82f6);
-    box-shadow: 0 0 0 2px var(--color-primary-light, #eff6ff);
   }
-  .create-form input[type="color"] {
+
+  .td-input::placeholder {
+    color: var(--text-muted);
+  }
+
+  .color-picker {
     width: 36px;
     height: 36px;
     padding: 2px;
-    border: 1px solid var(--color-border, #e2e8f0);
-    border-radius: 0.375rem;
+    background-color: var(--bg-app);
+    border: 1px solid var(--border-main);
+    border-radius: var(--radius-md);
     cursor: pointer;
   }
-  .loading {
-    color: var(--color-muted, #718096);
-    padding: 2rem 0;
-    text-align: center;
-  }
-  .workspace-group {
-    margin-bottom: 2rem;
-  }
-  .workspace-name {
-    font-size: 1rem;
+
+  .submit-btn {
+    background-color: var(--brand-primary);
+    color: white;
     font-weight: 600;
-    color: var(--color-text, #1a202c);
-    margin: 0 0 0.75rem 0;
-    padding-bottom: 0.5rem;
-    border-bottom: 1px solid var(--color-border, #e2e8f0);
+    font-size: 0.875rem;
+    padding: 0.625rem 1.25rem;
+    border-radius: var(--radius-md);
+    transition: background-color 0.15s;
   }
-  .project-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    gap: 0.75rem;
+
+  .submit-btn:hover:not(:disabled) {
+    background-color: var(--brand-hover);
   }
-  .project-card {
+
+  .submit-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .page-content {
     display: flex;
+    flex-direction: column;
+    gap: 2.5rem;
+    padding-bottom: 3rem;
+  }
+
+  .workspace-section {
+    display: flex;
+    flex-direction: column;
     gap: 0.75rem;
-    padding: 1rem;
-    border: 1px solid var(--color-border, #e2e8f0);
-    border-radius: 0.5rem;
+  }
+
+  .workspace-title {
+    font-size: 0.875rem;
+    font-weight: 700;
+    color: var(--text-main);
+    margin: 0;
+    padding-left: 0.25rem;
+  }
+
+  .project-list {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .project-list-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 0.5rem;
+    border-bottom: 1px solid var(--border-main);
     text-decoration: none;
-    color: inherit;
-    background: var(--color-surface, #fff);
-    transition: box-shadow 0.15s ease, border-color 0.15s ease;
+    transition: background-color 0.1s;
+    border-radius: var(--radius-sm);
   }
-  .project-card:hover {
-    border-color: var(--color-primary, #3b82f6);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+
+  .project-list-item:hover {
+    background-color: var(--bg-surface-hover);
   }
-  .project-color {
-    width: 12px;
-    min-width: 12px;
-    border-radius: 999px;
-    align-self: stretch;
+
+  .project-list-item:last-child {
+    border-bottom: none;
   }
-  .project-info {
-    min-width: 0;
+
+  .project-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
+
+  .project-details {
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+  }
+
   .project-name {
     font-size: 0.9375rem;
-    font-weight: 600;
-    margin: 0 0 0.25rem 0;
-    color: var(--color-text, #1a202c);
+    font-weight: 500;
+    color: var(--text-main);
   }
+
   .project-desc {
-    font-size: 0.8125rem;
-    color: var(--color-muted, #718096);
-    margin: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    font-size: 0.75rem;
+    color: var(--text-muted);
   }
-  .empty-workspace {
-    font-size: 0.8125rem;
-    color: var(--color-muted, #a0aec0);
-    grid-column: 1 / -1;
-    text-align: center;
-    padding: 1.5rem 0;
+
+  .status-container, .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    color: var(--text-muted);
+    padding: 2rem 0;
+  }
+
+  .empty-icon {
+    opacity: 0.5;
+  }
+
+  .spinner {
+    width: 24px;
+    height: 24px;
+    border: 2px solid var(--border-main);
+    border-top-color: var(--brand-primary);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
   }
 </style>
