@@ -259,6 +259,8 @@
 
   /* Top bar */
   .topbar {
+    grid-column: 2;
+    grid-row: 1;
     background-color: var(--bg-app);
     border-bottom: 1px solid var(--border-main);
     display: flex;
@@ -357,6 +359,8 @@
 
   /* Main Content */
   .main-content {
+    grid-column: 2;
+    grid-row: 2;
     background-color: var(--bg-app);
     overflow-y: auto;
     position: relative;
@@ -387,6 +391,8 @@
 
   /* Detail Panel */
   .detail-panel {
+    grid-column: 3;
+    grid-row: 1 / -1;
     background-color: var(--bg-surface);
     border-left: 1px solid var(--border-main);
     z-index: 10;
