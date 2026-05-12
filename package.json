@@ -9,7 +9,7 @@
     "packages/web"
   ],
   "scripts": {
-    "dev": "bun --env-file=.env x portless",
+    "dev": "bun --env-file=.env run --filter web dev & bun --env-file=.env run --filter api dev",
     "build": "bun --env-file=.env run --filter '*' build",
     "db:generate": "bun --env-file=.env run --filter api db:generate",
     "db:migrate": "bun --env-file=.env run --filter api db:migrate",
@@ -17,7 +17,6 @@
     "typecheck": "bun run --filter '*' typecheck"
   },
   "devDependencies": {
-    "@types/bun": "latest",
-    "portless": "^0.13.0"
+    "@types/bun": "latest"
   }
 }

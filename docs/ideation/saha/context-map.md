@@ -1,131 +1,114 @@
-# Context Map: Phase 2 Implementation
+# Context Map: Saha Stack (tRPC + Hono + Zod)
 
-**Generated**: 2025-01-11
-**Confidence Score**: 85/100
+**Generated**: 2026-05-12
+**Confidence Score**: 95/100
 
 ## Key Patterns
 
 ### Backend Module Structure
-Every domain module follows this pattern:
-- `packages/api/src/modules/{domain}/{domain}.route.ts` — Elysia routes with validation schemas
-- `packages/api/src/modules/{domain}/{domain}.service.ts` — Business logic, DB queries
-- `packages/api/src/modules/{domain}/{domain}.schema.ts` — Elysia validation schemas (t.Object)
-- `packages/api/src/modules/{domain}/{domain}.type.ts` — TypeScript types (avoid, prefer shared)
+Every domain (workspace, project, task, sprint) gets:
+- `packages/api/src/modules/{domain}/{domain}.router.ts` — tRPC router (queries + mutations)
+- `packages/api/src/modules/{domain}/{domain}.service.ts` — Business logic, DB queries (unchanged conceptually)
+- `packages/api/src/modules/{domain}/{domain}.schema.ts` — Zod schemas (replaces Elysia t.Object)
+- `packages/api/src/modules/{domain}/{domain}.type.ts` — TypeScript types (same)
 
-Reference: `packages/api/src/modules/auth/auth.route.ts`, `auth.service.ts`, `auth.schema.ts`
-
-### Route Handler Pattern
+### tRPC Router Pattern
+Show the standard tRPC v11 pattern:
 ```typescript
-// route.ts
-import { Elysia, t } from 'elysia'
-import { someService } from './some.service'
+import { z } from 'zod'
+import { router, publicProcedure, protectedProcedure } from '../../trpc'
+import { projectService } from './project.service'
 
-export const someRoutes = new Elysia({ prefix: '/some' })
-  .get('/', ({ query, user }) => someService.list(query, user.id))
-  .post('/', ({ body, user }) => someService.create(body, user.id))
-```
-
-The `user` property is attached by `auth-guard.ts` middleware. All protected routes inherit from the main app which uses the guard.
-
-### Frontend Store Pattern
-Svelte stores in `packages/web/src/lib/stores/`:
-```typescript
-// stores/something.ts
-import { writable, derived } from 'svelte/store'
-import { api } from '$lib/eden'
-
-export const items = writable<Item[]>([])
-export const isLoading = writable(false)
-
-export async function fetchItems() {
-  isLoading.set(true)
-  const { data, error } = await api.items.get()
-  if (!error) items.set(data)
-  isLoading.set(false)
-}
-```
-
-Reference: `packages/web/src/lib/stores/auth.ts`
-
-### Eden Treaty API Client
-Typed API calls via Eden Treaty:
-```typescript
-// In Svelte component or .ts file
-import { api } from '$lib/eden'
-
-const { data, error } = await api.tasks.get({ workspaceIds: ['...'] })
-```
-
-Reference: `packages/web/src/lib/eden.ts`
-
-## Database Patterns
-
-### Insert Pattern
-```typescript
-const [newTask] = await db.insert(tasks).values({
-  projectId,
-  title,
-  status: 'todo',
-}).returning()
-```
-
-### Query with Relations
-```typescript
-const result = await db.query.workspaceMembers.findMany({
-  where: eq(workspaceMembers.userId, userId),
-  with: { workspace: true }
+export const projectRouter = router({
+  list: protectedProcedure
+    .input(z.object({ workspaceId: z.string().uuid().optional() }))
+    .query(({ input, ctx }) => projectService.listByWorkspace(input.workspaceId, ctx.user.id)),
+  
+  create: protectedProcedure
+    .input(z.object({ workspaceId: z.string().uuid(), name: z.string().min(1) }))
+    .mutation(({ input, ctx }) => projectService.create(input, ctx.user.id)),
 })
 ```
 
-### Using `eq` from drizzle-orm
-All conditions use `eq`, `and`, `or` from drizzle-orm. Import: `import { eq, and } from 'drizzle-orm'`
-
-## Dependencies
-
-### Phase 2 Depends On
-- `statusChangedAt` column must be added to `tasks` table (migration)
-- `isInbox` column must be added to `projects` table (migration)
-- `audit_logs` table already exists from Phase 1 schema
-
-### New Tables Required
-None — all tables exist from Phase 1.
-
-### API Mount Points
-`packages/api/src/index.ts` must mount new routes:
+### tRPC Context Pattern
+Show how `ctx.user` is passed via tRPC context (extracted from auth middleware in Hono):
 ```typescript
-.use(workspaceRoutes)
-.use(projectRoutes)
-.use(taskRoutes)
+// trpc.ts
+export const createContext = async ({ req }: { req: Request }) => {
+  const session = getCookie(req, 'session')
+  const user = await validateSession(session)
+  return { user, db }
+}
+
+export const protectedProcedure = t.procedure.use(
+  t.middleware(({ ctx, next }) => {
+    if (!ctx.user) throw new TRPCError({ code: 'UNAUTHORIZED' })
+    return next({ ctx: { user: ctx.user } })
+  })
+)
 ```
 
-## Conventions
+### Frontend Store Pattern
+Replace Eden Treaty with tRPC client:
+```typescript
+import { writable } from 'svelte/store'
+import { trpc } from '$lib/trpc'
 
-### Naming
-- **Files**: kebab-case (`task.service.ts`, `nlp-parser.ts`)
-- **Types**: PascalCase (`Task`, `ParsedTaskInput`)
-- **Functions**: camelCase (`parseTaskInput`, `createAuditLog`)
-- **Endpoints**: REST conventions (`GET /tasks`, `POST /tasks/:id/status`)
+export const projects = writable<Project[]>([])
 
-### Error Handling
-Return `{ error: 'Message' }` with appropriate status code. Elysia's validation handles schema errors automatically.
+export async function fetchProjects() {
+  const data = await trpc.project.list.query({})
+  projects.set(data)
+}
+```
 
-### Testing
-- Unit tests: `*.spec.ts` next to implementation file
-- Integration tests: `*.integration.spec.ts` for full lifecycle tests
-- Test command: `bun run --filter api test -- {pattern}`
+### tRPC Client Setup
+How it's imported in SvelteKit:
+```typescript
+// packages/web/src/lib/trpc.ts
+import { createTRPCClient, httpBatchLink } from '@trpc/client'
+import type { AppRouter } from 'api'
 
-## Risks
+export const trpc = createTRPCClient<AppRouter>({
+  links: [httpBatchLink({ url: 'http://localhost:3000/trpc' })]
+})
+```
 
+### Hono Setup
+Show the top-level Hono server mounting:
+```typescript
+// packages/api/src/index.ts
+import { Hono } from 'hono'
+import { trpcServer } from '@hono/trpc-server'
+import { appRouter } from './router'
+import { createContext } from './trpc'
+
+const app = new Hono()
+app.use('/trpc/*', trpcServer({ router: appRouter, createContext }))
+```
+
+### Database Patterns
+Unchanged (still Drizzle ORM with postgres.js)
+
+### Naming conventions
+- Files: kebab-case
+- tRPC procedures: camelCase
+- Endpoints: All go through `/trpc` — no REST-style routes anymore
+
+### Dependencies section
+- `@trpc/server`
+- `@trpc/client`
+- `@hono/trpc-server`
+- `hono`
+- `zod`
+
+### Risks section
+Keep the same project risks but remove Elysia-specific ones:
 1. **NLP parser edge cases** — Regex-based parsing can miss edge cases. Test thoroughly with the experiment cases in spec.
-
 2. **Status transition validation** — Must check Sprint end date when reopening from `done`. Requires fetching the task's Sprint (if any).
-
 3. **Assignee resolution** — Case-insensitive username match must query `users` table within workspace membership scope.
-
 4. **Workspace filter in Home endpoint** — Must join through `projects → workspaces → workspace_members` to filter by visible workspaces.
-
 5. **Concurrency on audit logs** — Fire-and-forget pattern. Consider wrapping in try/catch to prevent audit errors from surfacing.
-
 6. **neodrag integration** — New dependency. Test that drag state updates sync with API calls.
 
 ## Phase 2 Component Order (Resolved)

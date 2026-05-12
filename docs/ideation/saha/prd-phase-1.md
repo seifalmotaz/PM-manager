@@ -46,8 +46,8 @@ After this phase, a user can sign in via WorkOS, their personal workspace is aut
 ### Monorepo Setup
 
 - **FR-1.14**: Bun workspaces configured with packages/web, packages/api, packages/shared
-- **FR-1.15**: `bun dev` command starts both SvelteKit dev server and Elysia API server
-- **FR-1.16**: Eden Treaty configured so web package imports typed API client from api package
+- **FR-1.15**: `bun dev` command starts both SvelteKit dev server and Hono API server
+- **FR-1.16**: tRPC client configured so web package imports typed API client from api package
 
 ## Non-Functional Requirements
 
@@ -68,7 +68,7 @@ After this phase, a user can sign in via WorkOS, their personal workspace is aut
 - Personal workspace auto-created per user
 - Full database schema with all v1 tables
 - Layout shell with sidebar and top bar
-- Eden Treaty client configured for Phase 2 feature development
+- tRPC client configured for Phase 2 feature development
 
 ## Acceptance Criteria
 
