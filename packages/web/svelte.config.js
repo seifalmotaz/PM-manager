@@ -8,6 +8,7 @@ const config = {
     adapter: adapter(),
     alias: {
       api: '../api/src/router.ts',
+      shared: '../shared/src',
     },
   },
   compilerOptions: {

@@ -1,11 +1,20 @@
 <script lang="ts">
   import { page } from '$app/stores'
   import { getAuth, isAuthenticated, fetchSession, logout } from '$lib/stores/auth.svelte'
+  import WorkspaceFilter from '$lib/components/WorkspaceFilter.svelte'
+  import DeadlineBadge from '$lib/components/DeadlineBadge.svelte'
+  import { fetchWorkspaces } from '$lib/stores/workspaces'
+  import { fetchOverdueCount } from '$lib/stores/tasks'
 
   let { children } = $props()
 
   $effect(() => {
     fetchSession()
+  })
+
+  $effect(() => {
+    fetchWorkspaces()
+    fetchOverdueCount()
   })
 </script>
 
@@ -13,8 +22,8 @@
   <!-- Top bar -->
   <header class="topbar">
     <span class="brand">Saha</span>
-    <button class="workspace-filter" disabled>Workspaces</button>
-    <span class="deadline-badge">0 overdue</span>
+    <WorkspaceFilter />
+    <DeadlineBadge />
     <input class="search-input" placeholder="Search..." disabled />
   </header>
 
@@ -69,24 +78,6 @@
     font-weight: 700;
     font-size: 1.1rem;
     color: var(--brand-color);
-  }
-
-  .workspace-filter {
-    background: none;
-    border: 1px solid var(--border-color);
-    border-radius: 0.375rem;
-    padding: 0.25rem 0.75rem;
-    font-size: 0.875rem;
-    color: var(--muted-text);
-  }
-
-  .deadline-badge {
-    margin-left: auto;
-    font-size: 0.75rem;
-    color: var(--muted-text);
-    background: var(--hover-bg);
-    padding: 0.125rem 0.5rem;
-    border-radius: 9999px;
   }
 
   .search-input {
