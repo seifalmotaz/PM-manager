@@ -11,9 +11,6 @@ const config = {
       shared: '../shared/src',
     },
   },
-  compilerOptions: {
-    runes: true,
-  },
 }
 
 export default config
