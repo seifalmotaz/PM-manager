@@ -1,70 +1,60 @@
 :root {
-  /* Zinc Scale (Neutral) */
-  --zinc-50: #fafafa;
-  --zinc-100: #f4f4f5;
-  --zinc-200: #e4e4e7;
-  --zinc-300: #d4d4d8;
-  --zinc-400: #a1a1aa;
-  --zinc-500: #71717a;
-  --zinc-600: #52525b;
-  --zinc-700: #3f3f46;
-  --zinc-800: #27272a;
-  --zinc-900: #18181b;
-  --zinc-950: #09090b;
-
-  /* Slate Scale (Cool) */
-  --slate-50: #f8fafc;
-  --slate-100: #f1f5f9;
-  --slate-200: #e2e8f0;
-  --slate-300: #cbd5e1;
-  --slate-400: #94a3b8;
-  --slate-500: #64748b;
-  --slate-600: #475569;
-  --slate-700: #334155;
-  --slate-800: #1e293b;
-  --slate-900: #0f172a;
-  --slate-950: #020617;
-
-  /* Semantic Colors - Default (Dark Mode inspired by "The Slate") */
-  --bg-app: var(--zinc-950);
-  --bg-sidebar: var(--zinc-950);
-  --bg-surface: var(--zinc-900);
-  --bg-surface-hover: var(--zinc-800);
+  /* Todoist Color Palette - Dark Mode */
+  --td-bg: #1f1f1f;
+  --td-sidebar: #282828;
+  --td-surface: #282828;
+  --td-hover: #363636;
+  --td-primary: #db4c3f; /* Todoist Red */
+  --td-primary-hover: #c3392c;
   
-  --text-main: var(--zinc-100);
-  --text-muted: var(--zinc-400);
-  --text-inverse: var(--zinc-950);
-
-  --border-main: var(--zinc-800);
-  --border-muted: var(--zinc-900);
+  --td-text-main: #ffffff;
+  --td-text-muted: #808080;
+  --td-text-secondary: #aaaaaa;
   
-  --brand-primary: #4f46e5; /* Indigo 600 */
-  --brand-hover: #4338ca;
-  
-  --sidebar-width: 240px;
-  --sidebar-collapsed-width: 64px;
-  --topbar-height: 56px;
-  --detail-panel-width: 400px;
+  --td-border: #333333;
+  --td-border-muted: #2a2a2a;
 
-  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --radius-sm: 0.25rem;
-  --radius-md: 0.375rem;
-  --radius-lg: 0.5rem;
-}
-
-/* Light Mode Overrides */
-:global(.light-mode) {
-  --bg-app: var(--zinc-50);
-  --bg-sidebar: var(--zinc-100);
-  --bg-surface: #ffffff;
-  --bg-surface-hover: var(--zinc-100);
+  /* Semantic Mappings */
+  --bg-app: var(--td-bg);
+  --bg-sidebar: var(--td-sidebar);
+  --bg-surface: var(--td-surface);
+  --bg-surface-hover: var(--td-hover);
   
-  --text-main: var(--zinc-900);
-  --text-muted: var(--zinc-500);
+  --text-main: var(--td-text-main);
+  --text-muted: var(--td-text-muted);
   --text-inverse: #ffffff;
 
-  --border-main: var(--zinc-200);
-  --border-muted: var(--zinc-100);
+  --border-main: var(--td-border);
+  --border-muted: var(--td-border-muted);
+  
+  --brand-primary: var(--td-primary);
+  --brand-hover: var(--td-primary-hover);
+  
+  --sidebar-width: 280px;
+  --sidebar-collapsed-width: 68px;
+  --topbar-height: 48px;
+  --detail-panel-width: 450px;
+
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --radius-sm: 3px;
+  --radius-md: 5px;
+  --radius-lg: 8px;
+
+  --container-max-width: 800px;
+}
+
+/* Light Mode Overrides (Todoist Classic) */
+:global(.light-mode) {
+  --bg-app: #ffffff;
+  --bg-sidebar: #fafafa;
+  --bg-surface: #ffffff;
+  --bg-surface-hover: #f3f3f3;
+  
+  --text-main: #202020;
+  --text-muted: #808080;
+  
+  --border-main: #eeeeee;
+  --border-muted: #f9f9f9;
 }
 
 *, *::before, *::after {
@@ -76,11 +66,12 @@
 html, body {
   height: 100%;
   font-family: var(--font-sans);
-  font-size: 14px;
+  font-size: 16px; /* Increased from 14px */
   background-color: var(--bg-app);
   color: var(--text-main);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  line-height: 1.5;
 }
 
 button {
@@ -91,7 +82,7 @@ button {
   color: inherit;
 }
 
-input {
+input, textarea, select {
   font-family: inherit;
   border: none;
   background: none;
@@ -104,10 +95,18 @@ a {
   color: inherit;
 }
 
-/* Scrollbar Styling */
+/* Common Layout Helpers */
+.centered-well {
+  max-width: var(--container-max-width);
+  margin: 0 auto;
+  width: 100%;
+  padding: 0 1.5rem;
+}
+
+/* Scrollbar Styling - Todoist style */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
@@ -115,10 +114,10 @@ a {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--border-main);
+  background: rgba(128, 128, 128, 0.2);
   border-radius: 10px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--zinc-700);
+  background: rgba(128, 128, 128, 0.4);
 }

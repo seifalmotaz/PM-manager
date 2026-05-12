@@ -2,7 +2,7 @@
   import { trpc } from '$lib/trpc'
   import { activeFilterIds } from '$lib/stores/workspaces'
   import { parseTaskInput } from 'shared/nlp-parser'
-  import { Layers, Plus, Tag, Calendar, User, Zap } from 'lucide-svelte'
+  import { Layers, Plus, Tag, Calendar, User, Zap, Send } from 'lucide-svelte'
   import { clsx } from 'clsx'
 
   let {
@@ -61,13 +61,17 @@
   }
 
   async function handleSubmit() {
-    if (!input.trim() || !selectedProjectId || isCreating) return
+    const trimmedInput = input.trim()
+    if (!trimmedInput || !selectedProjectId || isCreating) return
     isCreating = true
     try {
-      const p = parseTaskInput(input)
+      const p = parseTaskInput(trimmedInput)
+      // Use the parsed title (stripped of shortcuts), or the full input if stripping results in empty
+      const finalTitle = p.title || trimmedInput
+      
       await trpc.task.create.mutate({
         projectId: selectedProjectId,
-        title: p.title || input.trim(),
+        title: finalTitle,
         priority: p.priority ?? undefined,
         storyPoints: p.storyPoints ?? undefined,
         dueDate: p.dueDate ? p.dueDate.toISOString() : undefined,
@@ -89,216 +93,200 @@
   }
 </script>
 
-<div class={clsx('quick-add-container', isFocused && 'focused', isCreating && 'loading')}>
-  <div class="quick-add-header">
-    <div class="project-selector">
-      <Layers size={14} class="icon-muted" />
-      <select bind:value={selectedProjectId} class="project-select" disabled={isCreating}>
-        <option value="">Select project...</option>
-        {#each projects as project (project.id)}
-          <option value={project.id}>{project.name}</option>
-        {/each}
-      </select>
-    </div>
-  </div>
-
-  <div class="input-area">
-    <div class="input-icon">
-      {#if isCreating}
-        <div class="spinner-small"></div>
-      {:else}
-        <Plus size={18} class="icon-brand" />
-      {/if}
+<div class={clsx('quick-add-v2', isFocused && 'focused', isCreating && 'loading')}>
+  <div class="input-row">
+    <div class="input-wrapper">
+      <input
+        type="text"
+        bind:value={input}
+        placeholder="e.g. Meet Seif at 5pm p1"
+        onkeydown={handleKeydown}
+        onfocus={() => isFocused = true}
+        onblur={() => isFocused = false}
+        disabled={isCreating}
+      />
     </div>
     
-    <input
-      type="text"
-      bind:value={input}
-      placeholder="Type a task title, add metadata like 'p1 tomorrow @me'..."
-      onkeydown={handleKeydown}
-      onfocus={() => isFocused = true}
-      onblur={() => isFocused = false}
-      disabled={isCreating}
-      autofocus
-    />
-
-    {#if onAddWithDetails && selectedProjectId}
-      <button
-        class="action-btn"
-        onclick={() => onAddWithDetails(selectedProjectId)}
-        title="Open Full Form"
-      >
-        <Zap size={14} />
+    <div class="actions-right">
+      {#if input.trim()}
+        <button class="submit-btn" onclick={handleSubmit} disabled={isCreating}>
+          <Send size={18} />
+        </button>
+      {/if}
+      <button class="action-icon-btn" onclick={() => selectedProjectId = ''} title="Switch Project">
+        <Layers size={18} />
       </button>
-    {/if}
+    </div>
   </div>
 
-  {#if input.trim()}
-    <div class="parsed-preview">
-      {#if parsed.priority}
-        <span class="preview-tag priority">
-          <Tag size={10} />
-          {parsed.priority.toUpperCase()}
-        </span>
-      {/if}
-      {#if parsed.storyPoints !== undefined}
-        <span class="preview-tag points">
-          {parsed.storyPoints} SP
-        </span>
-      {/if}
-      {#if parsed.dueDate}
-        <span class="preview-tag date">
-          <Calendar size={10} />
-          {formatPreviewDate(parsed.dueDate)}
-        </span>
-      {/if}
-      {#if parsed.assigneeUsername}
-        <span class="preview-tag user">
-          <User size={10} />
-          @{parsed.assigneeUsername}
-        </span>
-      {/if}
+  {#if isFocused || input.trim()}
+    <div class="meta-footer">
+      <div class="preview-chips">
+        {#if parsed.priority}
+          <span class={clsx('chip priority', parsed.priority)}>
+            <Tag size={12} />
+            {parsed.priority.toUpperCase()}
+          </span>
+        {/if}
+        {#if parsed.dueDate}
+          <span class="chip date">
+            <Calendar size={12} />
+            {formatPreviewDate(parsed.dueDate)}
+          </span>
+        {/if}
+        {#if parsed.assigneeUsername}
+          <span class="chip user">
+            <User size={12} />
+            @{parsed.assigneeUsername}
+          </span>
+        {/if}
+      </div>
+
+      <div class="project-picker-inline">
+        <Layers size={14} class="icon-muted" />
+        <select bind:value={selectedProjectId} disabled={isCreating}>
+          {#each projects as project (project.id)}
+            <option value={project.id}>{project.name}</option>
+          {/each}
+        </select>
+      </div>
     </div>
   {/if}
 </div>
 
 <style>
-  .quick-add-container {
-    background-color: var(--bg-surface);
+  .quick-add-v2 {
+    background-color: transparent;
     border: 1px solid var(--border-main);
     border-radius: var(--radius-lg);
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-    overflow: hidden;
+    transition: all 0.2s ease;
+    margin-bottom: 2rem;
   }
 
-  .quick-add-container.focused {
-    border-color: var(--brand-primary);
-    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-    transform: translateY(-1px);
+  .quick-add-v2.focused {
+    border-color: var(--td-text-muted);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
   }
 
-  .quick-add-header {
+  .input-row {
     display: flex;
     align-items: center;
-    padding: 0.5rem 1rem;
-    background-color: var(--zinc-900);
-    border-bottom: 1px solid var(--border-muted);
-  }
-
-  .project-selector {
-    display: flex;
-    align-items: center;
+    padding: 0.5rem 0.75rem;
     gap: 0.5rem;
   }
 
-  .project-select {
-    font-size: 0.75rem;
-    font-weight: 600;
-    color: var(--text-muted);
-    background: none;
-    border: none;
-    cursor: pointer;
-    padding: 2px 0;
-  }
-
-  .project-select:hover {
-    color: var(--text-main);
-  }
-
-  .input-area {
-    display: flex;
-    align-items: center;
-    padding: 0.75rem 1rem;
-    gap: 0.75rem;
-  }
-
-  .input-icon {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 20px;
-    height: 20px;
-  }
-
-  .icon-brand {
-    color: var(--brand-primary);
-  }
-
-  .icon-muted {
-    color: var(--text-muted);
+  .input-wrapper {
+    flex: 1;
   }
 
   input {
-    flex: 1;
-    font-size: 0.9375rem;
+    width: 100%;
+    font-size: 1rem;
+    font-weight: 500;
     color: var(--text-main);
-    background: none;
-    border: none;
-    outline: none;
+    padding: 0.5rem 0;
   }
 
   input::placeholder {
     color: var(--text-muted);
-    opacity: 0.6;
+    font-weight: 400;
   }
 
-  .action-btn {
-    padding: 4px;
-    color: var(--text-muted);
-    border-radius: 4px;
-    transition: all 0.15s;
-  }
-
-  .action-btn:hover {
-    background-color: var(--zinc-800);
-    color: var(--brand-primary);
-  }
-
-  .parsed-preview {
+  .actions-right {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    padding: 0 1rem 0.75rem 1rem;
-    margin-left: 2.25rem;
-    flex-wrap: wrap;
+    gap: 0.25rem;
   }
 
-  .preview-tag {
+  .submit-btn {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: var(--brand-primary);
+    color: white;
+    border-radius: 50%;
+    transition: transform 0.1s;
+  }
+
+  .submit-btn:active {
+    transform: scale(0.9);
+  }
+
+  .action-icon-btn {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    border-radius: 4px;
+  }
+
+  .action-icon-btn:hover {
+    background-color: var(--bg-surface-hover);
+    color: var(--text-main);
+  }
+
+  .meta-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 0.75rem;
+    border-top: 1px solid var(--border-muted);
+    background-color: var(--td-border-muted);
+    border-bottom-left-radius: var(--radius-lg);
+    border-bottom-right-radius: var(--radius-lg);
+  }
+
+  .preview-chips {
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .chip {
     display: inline-flex;
     align-items: center;
-    gap: 0.25rem;
-    padding: 2px 8px;
-    background-color: var(--zinc-800);
-    border-radius: 4px;
-    font-size: 0.6875rem;
+    gap: 0.375rem;
+    font-size: 0.75rem;
     font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background-color: var(--bg-surface-hover);
     color: var(--text-muted);
-    border: 1px solid var(--border-muted);
+    border: 1px solid var(--border-main);
   }
 
-  .preview-tag.priority {
-    color: #fca5a5;
-    background-color: rgba(153, 27, 27, 0.2);
-    border-color: rgba(153, 27, 27, 0.3);
+  .chip.priority.p0 { color: #db4c3f; border-color: rgba(219, 76, 63, 0.3); }
+  .chip.priority.p1 { color: #ff9a00; border-color: rgba(255, 154, 0, 0.3); }
+  .chip.priority.p2 { color: #246fe0; border-color: rgba(36, 111, 224, 0.3); }
+
+  .project-picker-inline {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
   }
 
-  .preview-tag.date {
-    color: #93c5fd;
-    background-color: rgba(30, 58, 138, 0.2);
-    border-color: rgba(30, 58, 138, 0.3);
+  .project-picker-inline select {
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--text-muted);
+    background: none;
+    cursor: pointer;
   }
 
-  .spinner-small {
-    width: 14px;
-    height: 14px;
-    border: 2px solid var(--zinc-700);
-    border-top-color: var(--brand-primary);
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
+  .project-picker-inline select:hover {
+    color: var(--text-main);
   }
 
-  @keyframes spin {
-    to { transform: rotate(360deg); }
+  .icon-muted {
+    color: var(--text-muted);
+    opacity: 0.7;
+  }
+
+  .loading {
+    opacity: 0.7;
+    pointer-events: none;
   }
 </style>

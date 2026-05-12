@@ -1,0 +1,54 @@
+<h2>Todoist-Inspired Redesign</h2>
+<p class="subtitle">Focusing on centered layout, larger text, and the Todoist color palette.</p>
+
+<div class="options">
+  <div class="option" data-choice="todoist-light" onclick="toggleSelect(this)" style="background: #fff; border: 1px solid #ddd; color: #202020;">
+    <div class="letter" style="background: #db4c3f; color: #fff;">A</div>
+    <div class="content">
+      <h3 style="color: #db4c3f;">"The Classic Todoist"</h3>
+      <p>Clean white background, Todoist Red accents, and centered list focus. High readability with 16px text.</p>
+      <div class="mockup" style="margin-top: 1rem; border: 1px solid #eee; padding: 20px; background: #fff;">
+        <div style="max-width: 400px; margin: 0 auto;">
+          <h4 style="font-size: 1.5rem; margin-bottom: 1rem;">Inbox</h4>
+          <div style="border-bottom: 1px solid #eee; padding: 10px 0; display: flex; align-items: center; gap: 10px;">
+            <div style="width: 18px; height: 18px; border: 1px solid #ccc; border-radius: 50%;"></div>
+            <div style="flex: 1; height: 12px; background: #f0f0f0; border-radius: 6px;"></div>
+          </div>
+          <div style="border-bottom: 1px solid #eee; padding: 10px 0; display: flex; align-items: center; gap: 10px;">
+            <div style="width: 18px; height: 18px; border: 1px solid #ccc; border-radius: 50%;"></div>
+            <div style="flex: 1; height: 12px; background: #f0f0f0; border-radius: 6px;"></div>
+          </div>
+          <div style="margin-top: 1rem; color: #db4c3f; font-weight: bold; cursor: pointer;">+ Add task</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="todoist-dark" onclick="toggleSelect(this)" style="background: #1f1f1f; border: 1px solid #333; color: #eee;">
+    <div class="letter" style="background: #db4c3f; color: #fff;">B</div>
+    <div class="content">
+      <h3 style="color: #db4c3f;">"Modern Dark Todoist"</h3>
+      <p>The dark mode version of Todoist. Deep grays, high contrast red accents, and centered focus.</p>
+      <div class="mockup" style="margin-top: 1rem; border: 1px solid #333; padding: 20px; background: #1f1f1f;">
+        <div style="max-width: 400px; margin: 0 auto;">
+          <h4 style="font-size: 1.5rem; margin-bottom: 1rem; color: #fff;">Today</h4>
+          <div style="border-bottom: 1px solid #333; padding: 10px 0; display: flex; align-items: center; gap: 10px;">
+            <div style="width: 18px; height: 18px; border: 1px solid #555; border-radius: 50%;"></div>
+            <div style="flex: 1; height: 12px; background: #333; border-radius: 6px;"></div>
+          </div>
+          <div style="margin-top: 1rem; color: #db4c3f; font-weight: bold; cursor: pointer;">+ Add task</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="background: #fff; padding: 20px; border-radius: 8px; border: 1px solid #eee;">
+  <h3>Layout Strategy: The Centered Well</h3>
+  <p>We'll restrict the main content to a max-width (e.g., 800px) and center it in the Content Pane. This matches the Todoist feel where your focus is always in the middle, reducing eye strain.</p>
+  <ul style="margin-top: 1rem; line-height: 1.8;">
+    <li><strong>Font Size</strong>: Increase base to 16px (was 14px).</li>
+    <li><strong>Colors</strong>: Exact hex codes from Todoist (#db4c3f red, #ffffff background).</li>
+    <li><strong>Kanban</strong>: Re-evaluate if Home should be a List by default (like Todoist) or if the Board needs a centered layout.</li>
+  </ul>
+</div>

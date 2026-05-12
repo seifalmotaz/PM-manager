@@ -170,29 +170,31 @@
     height: var(--topbar-height);
     display: flex;
     align-items: center;
-    padding: 0 1rem;
+    padding: 0 1.5rem;
     gap: 0.75rem;
     position: relative;
+    margin-bottom: 1.5rem;
   }
 
   .brand-logo {
-    width: 32px;
-    height: 32px;
+    width: 24px;
+    height: 24px;
     background-color: var(--brand-primary);
     color: white;
-    border-radius: var(--radius-md);
+    border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
     font-weight: 800;
-    font-size: 1.25rem;
+    font-size: 0.875rem;
     flex-shrink: 0;
   }
 
   .brand-name {
     font-weight: 700;
-    font-size: 1.1rem;
-    letter-spacing: -0.025em;
+    font-size: 1.25rem;
+    letter-spacing: -0.02em;
+    color: var(--brand-primary);
   }
 
   .sidebar-toggle {
@@ -234,11 +236,19 @@
     display: flex;
     align-items: center;
     gap: 0.75rem;
-    padding: 0.5rem 0.75rem;
+    padding: 0.75rem 1.25rem;
     border-radius: var(--radius-md);
     color: var(--text-muted);
     transition: all 0.15s ease;
-    height: 40px;
+    height: 48px;
+    font-weight: 500;
+    overflow: hidden;
+  }
+
+  .sidebar-collapsed .nav-link {
+    justify-content: center;
+    padding: 0.75rem 0;
+    gap: 0;
   }
 
   .nav-link:hover {
@@ -247,8 +257,8 @@
   }
 
   .nav-link[aria-current="page"] {
-    background-color: var(--bg-surface-hover);
-    color: var(--brand-primary);
+    background-color: var(--td-hover);
+    color: var(--text-main);
     font-weight: 600;
   }
 
@@ -262,12 +272,13 @@
     grid-column: 2;
     grid-row: 1;
     background-color: var(--bg-app);
-    border-bottom: 1px solid var(--border-main);
+    border-bottom: none;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0 1.5rem;
+    padding: 0 2rem;
     gap: 2rem;
+    height: 64px;
   }
 
   .topbar-left {
@@ -280,16 +291,15 @@
     display: flex;
     align-items: center;
     gap: 0.75rem;
-    background-color: var(--bg-surface);
-    border: 1px solid var(--border-main);
-    border-radius: var(--radius-md);
-    padding: 0.5rem 0.75rem;
+    background-color: transparent;
+    border: none;
+    padding: 0.5rem 0;
     color: var(--text-muted);
-    transition: border-color 0.15s;
+    transition: color 0.15s;
   }
 
   .command-trigger:hover {
-    border-color: var(--zinc-600);
+    color: var(--text-main);
   }
 
   .command-placeholder {

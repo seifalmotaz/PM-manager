@@ -27,25 +27,28 @@ export function parseTaskInput(input: string): ParsedTaskInput {
   const priority = priorityMatch
     ? (`p${priorityMatch[1]}` as ParsedTaskInput['priority'])
     : undefined
-  if (priorityMatch) remaining = remaining.replace(priorityMatch[0], '')
+  // Strip ALL occurrences of priority tags from the title
+  remaining = remaining.replace(/\bp[0-3]\b/gi, '')
 
   // Extract story points: sp:5, sp:0.5, sp:13
   const spMatch = remaining.match(/\bsp:(\d+(?:\.\d+)?)\b/i)
   const storyPoints = spMatch ? parseFloat(spMatch[1]) : undefined
-  if (spMatch) remaining = remaining.replace(spMatch[0], '')
+  remaining = remaining.replace(/\bsp:\d+(?:\.\d+)?\b/gi, '')
 
   // Extract assignee: @username
   const assigneeMatch = remaining.match(/@(\w+)/)
   const assigneeUsername = assigneeMatch ? assigneeMatch[1] : undefined
-  if (assigneeMatch) remaining = remaining.replace(assigneeMatch[0], '')
+  remaining = remaining.replace(/@\w+/g, '')
 
   // Extract due date (ordered: first match wins)
   const datePatterns: Array<{
+    name: string
     pattern: RegExp
     getDate: (match: string) => Date
   }> = [
     {
-      pattern: /\btoday\b/i,
+      name: 'today',
+      pattern: /\btoday\b/gi,
       getDate: () => {
         const d = new Date()
         d.setHours(0, 0, 0, 0)
@@ -53,7 +56,8 @@ export function parseTaskInput(input: string): ParsedTaskInput {
       },
     },
     {
-      pattern: /\btomorrow\b/i,
+      name: 'tomorrow',
+      pattern: /\btomorrow\b/gi,
       getDate: () => {
         const d = new Date()
         d.setDate(d.getDate() + 1)
@@ -62,7 +66,8 @@ export function parseTaskInput(input: string): ParsedTaskInput {
       },
     },
     {
-      pattern: /\byesterday\b/i,
+      name: 'yesterday',
+      pattern: /\byesterday\b/gi,
       getDate: () => {
         const d = new Date()
         d.setDate(d.getDate() - 1)
@@ -71,14 +76,16 @@ export function parseTaskInput(input: string): ParsedTaskInput {
       },
     },
     {
-      pattern: /\b\d{4}-\d{2}-\d{2}\b/,
+      name: 'iso',
+      pattern: /\b\d{4}-\d{2}-\d{2}\b/g,
       getDate: (m: string) => {
         const d = new Date(m + 'T00:00:00')
         return d
       },
     },
     {
-      pattern: /\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i,
+      name: 'weekday',
+      pattern: /\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/gi,
       getDate: (m: string) => nextDayOfWeek(m),
     },
   ]
@@ -88,9 +95,13 @@ export function parseTaskInput(input: string): ParsedTaskInput {
     const match = remaining.match(pattern)
     if (match) {
       dueDate = getDate(match[0])
-      remaining = remaining.replace(match[0], '')
       break
     }
+  }
+  
+  // Strip ALL date patterns from the title
+  for (const { pattern } of datePatterns) {
+    remaining = remaining.replace(pattern, '')
   }
 
   return {

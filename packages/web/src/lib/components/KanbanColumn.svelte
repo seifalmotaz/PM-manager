@@ -151,54 +151,55 @@
   .kanban-column {
     display: flex;
     flex-direction: column;
-    background-color: var(--zinc-900);
+    background-color: transparent;
     border-radius: var(--radius-lg);
-    border: 1px solid var(--border-muted);
+    border: none;
     transition: all 0.2s ease;
-    min-width: 280px;
-    max-width: 350px;
+    min-width: 300px;
+    max-width: 400px;
     height: 100%;
   }
 
   .kanban-column.drop-target {
-    border-color: var(--brand-primary);
-    background-color: var(--zinc-800);
-    transform: scale(1.01);
+    background-color: var(--td-border-muted);
+    border-radius: var(--radius-lg);
   }
 
   .column-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0.875rem 1rem;
-    border-bottom: 1px solid var(--border-muted);
+    padding: 1rem 0;
+    margin-bottom: 0.5rem;
   }
 
   .header-left {
     display: flex;
     align-items: center;
-    gap: 0.75rem;
+    gap: 0.5rem;
   }
 
   .column-title {
-    font-size: 0.875rem;
-    font-weight: 600;
+    font-size: 1rem;
+    font-weight: 700;
     color: var(--text-main);
-    letter-spacing: -0.01em;
   }
 
   .task-count {
-    font-size: 0.75rem;
+    font-size: 0.8125rem;
     font-weight: 500;
     color: var(--text-muted);
-    background-color: var(--zinc-800);
-    padding: 1px 8px;
-    border-radius: 999px;
   }
 
   .header-actions {
     display: flex;
     gap: 0.25rem;
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+
+  .kanban-column:hover .header-actions {
+    opacity: 1;
   }
 
   .icon-btn {
@@ -213,43 +214,38 @@
   }
 
   .icon-btn:hover {
-    background-color: var(--zinc-800);
+    background-color: var(--bg-surface-hover);
     color: var(--text-main);
   }
 
   .column-body {
     flex: 1;
-    padding: 0.75rem;
+    padding: 0;
     display: flex;
     flex-direction: column;
-    gap: 0.75rem;
+    gap: 0.5rem;
     overflow-y: auto;
-    scrollbar-width: thin;
+    scrollbar-width: none;
   }
 
   .card-wrapper {
     cursor: grab;
-    transition: transform 0.1s;
   }
 
   .card-wrapper:active {
     cursor: grabbing;
-    transform: scale(0.98);
   }
 
   .empty-state {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    padding: 2rem 0;
+    text-align: center;
     border: 1px dashed var(--border-main);
     border-radius: var(--radius-md);
-    margin: 0.5rem 0;
-    min-height: 80px;
+    opacity: 0.5;
   }
 
   .empty-state p {
-    font-size: 0.8125rem;
+    font-size: 0.875rem;
     color: var(--text-muted);
   }
 </style>

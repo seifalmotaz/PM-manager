@@ -54,16 +54,17 @@
     height: 100%;
     overflow-x: auto;
     overflow-y: hidden;
-    padding-bottom: 1rem; /* Space for scrollbar */
-    scrollbar-width: thin;
+    padding-bottom: 1rem;
+    scrollbar-width: none;
   }
 
   .kanban-board {
     display: flex;
-    gap: 1.25rem;
+    gap: 2rem;
     height: 100%;
-    min-height: calc(100vh - 120px);
-    padding: 0.5rem;
+    min-height: calc(100vh - 200px);
+    padding: 1rem 0;
+    justify-content: center;
   }
 
   @media (min-width: 1440px) {

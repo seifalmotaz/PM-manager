@@ -2,15 +2,18 @@
   import { activeFilterIds } from '$lib/stores/workspaces'
   import { tasks, fetchTasks, isLoading, fetchOverdueCount } from '$lib/stores/tasks'
   import KanbanBoard from '$lib/components/KanbanBoard.svelte'
+  import TaskCard from '$lib/components/TaskCard.svelte'
   import QuickAddInput from '$lib/components/QuickAddInput.svelte'
   import TaskModal from '$lib/components/TaskModal.svelte'
   import { trpc } from '$lib/trpc'
   import type { TaskSummary } from '$lib/stores/tasks'
   import { Filter, SortAsc, LayoutGrid, List } from 'lucide-svelte'
+  import { clsx } from 'clsx'
 
   let selectedTask = $state<TaskSummary | null>(null)
   let showCreateModal = $state(false)
   let createModalProjectId = $state('')
+  let viewMode = $state<'kanban' | 'list'>('kanban')
 
   $effect(() => {
     const ids = $activeFilterIds
@@ -56,58 +59,101 @@
     createModalProjectId = projectId
     showCreateModal = true
   }
+
+  const columns = [
+    { id: 'todo', label: 'To Do' },
+    { id: 'in_progress', label: 'In Progress' },
+    { id: 'review', label: 'Review' },
+    { id: 'done', label: 'Done' },
+  ]
 </script>
 
 <div class="home-page">
-  <header class="page-header">
-    <div class="header-main">
-      <h1 class="page-title">Home</h1>
-      <span class="page-subtitle">Your tasks across all workspaces</span>
-    </div>
-
-    <div class="header-actions">
-      <div class="view-toggle">
-        <button class="toggle-btn active" title="Kanban View">
-          <LayoutGrid size={16} />
-        </button>
-        <button class="toggle-btn" title="List View">
-          <List size={16} />
-        </button>
+  <div class="centered-well">
+    <header class="page-header">
+      <div class="header-main">
+        <h1 class="page-title">Home</h1>
+        <span class="page-subtitle">Your tasks across all workspaces</span>
       </div>
 
-      <div class="divider"></div>
+      <div class="header-actions">
+        <div class="view-toggle">
+          <button 
+            class={clsx('toggle-btn', viewMode === 'kanban' && 'active')} 
+            onclick={() => viewMode = 'kanban'}
+            title="Kanban View"
+          >
+            <LayoutGrid size={16} />
+          </button>
+          <button 
+            class={clsx('toggle-btn', viewMode === 'list' && 'active')} 
+            onclick={() => viewMode = 'list'}
+            title="List View"
+          >
+            <List size={16} />
+          </button>
+        </div>
 
-      <button class="action-btn">
-        <Filter size={16} />
-        <span>Filter</span>
-      </button>
-      <button class="action-btn">
-        <SortAsc size={16} />
-        <span>Sort</span>
-      </button>
-    </div>
-  </header>
+        <div class="divider"></div>
 
-  <div class="page-content">
+        <button class="action-btn">
+          <Filter size={16} />
+          <span>Filter</span>
+        </button>
+        <button class="action-btn">
+          <SortAsc size={16} />
+          <span>Sort</span>
+        </button>
+      </div>
+    </header>
+
     <div class="quick-add-wrapper">
       <QuickAddInput onCreated={handleCreated} onAddWithDetails={handleAddWithDetails} />
     </div>
+  </div>
 
+  <div class="page-content">
     {#if $isLoading}
-      <div class="status-container">
-        <div class="spinner"></div>
-        <p>Loading your tasks...</p>
+      <div class="centered-well">
+        <div class="status-container">
+          <div class="spinner"></div>
+          <p>Loading your tasks...</p>
+        </div>
       </div>
     {:else if $tasks.length === 0}
-      <div class="status-container">
-        <p class="empty-msg">No tasks yet. Create one to get started!</p>
+      <div class="centered-well">
+        <div class="status-container">
+          <p class="empty-msg">No tasks yet. Create one to get started!</p>
+        </div>
+      </div>
+    {:else if viewMode === 'kanban'}
+      <div class="kanban-outer-container">
+        <KanbanBoard
+          tasks={$tasks}
+          onStatusChange={handleStatusChange}
+          onTaskClick={handleTaskClick}
+        />
       </div>
     {:else}
-      <KanbanBoard
-        tasks={$tasks}
-        onStatusChange={handleStatusChange}
-        onTaskClick={handleTaskClick}
-      />
+      <div class="centered-well">
+        <div class="task-list-view">
+          {#each columns as col}
+            {@const colTasks = $tasks.filter(t => t.status === col.id)}
+            {#if colTasks.length > 0}
+              <div class="list-section">
+                <h3 class="section-title">{col.label} <span class="count">{colTasks.length}</span></h3>
+                <div class="list-items">
+                  {#each colTasks as task (task.id)}
+                    <div class="task-item-wrapper">
+                      <TaskCard task={task} onclick={() => handleTaskClick(task)} />
+                    </div>
+                  {/each}
+                </div>
+              </div>
+            {/if}
+          {/each}
+        </div>
+      </div>
     {/if}
   </div>
 </div>
@@ -133,13 +179,15 @@
     display: flex;
     justify-content: space-between;
     align-items: flex-end;
-    margin-bottom: 2rem;
+    margin-bottom: 2.5rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--border-main);
   }
 
   .page-title {
-    font-size: 1.875rem;
-    font-weight: 800;
-    letter-spacing: -0.025em;
+    font-size: 1.5rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
     color: var(--text-main);
     line-height: 1.2;
   }
@@ -157,10 +205,8 @@
 
   .view-toggle {
     display: flex;
-    background-color: var(--zinc-900);
     padding: 2px;
-    border-radius: var(--radius-md);
-    border: 1px solid var(--border-main);
+    gap: 0.25rem;
   }
 
   .toggle-btn {
@@ -175,14 +221,13 @@
   }
 
   .toggle-btn.active {
-    background-color: var(--zinc-800);
+    background-color: var(--td-hover);
     color: var(--text-main);
-    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
   }
 
   .divider {
     width: 1px;
-    height: 24px;
+    height: 16px;
     background-color: var(--border-main);
   }
 
@@ -190,19 +235,17 @@
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    padding: 0.5rem 0.875rem;
-    background-color: var(--bg-surface);
-    border: 1px solid var(--border-main);
-    border-radius: var(--radius-md);
+    padding: 0.5rem 0;
+    background-color: transparent;
+    border: none;
     font-size: 0.875rem;
     font-weight: 500;
-    color: var(--text-main);
-    transition: all 0.15s;
+    color: var(--text-muted);
+    transition: color 0.15s;
   }
 
   .action-btn:hover {
-    background-color: var(--bg-surface-hover);
-    border-color: var(--zinc-600);
+    color: var(--text-main);
   }
 
   .page-content {
@@ -213,8 +256,58 @@
     min-height: 0;
   }
 
+  .kanban-outer-container {
+    width: 100%;
+    padding: 0 2rem;
+    flex: 1;
+    overflow-x: auto;
+  }
+
+  .task-list-view {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+    padding-top: 1rem;
+  }
+
+  .list-section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .section-title {
+    font-size: 0.875rem;
+    font-weight: 700;
+    color: var(--text-main);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0 0.5rem;
+  }
+
+  .section-title .count {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--text-muted);
+  }
+
+  .list-items {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .task-item-wrapper {
+    border-radius: var(--radius-md);
+  }
+
+  .task-item-wrapper:hover {
+    background-color: var(--bg-surface-hover);
+  }
+
   .quick-add-wrapper {
     max-width: 800px;
+    margin: 0 auto;
   }
 
   .status-container {

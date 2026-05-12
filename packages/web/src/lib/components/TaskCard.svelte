@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { TaskSummary } from '$lib/stores/tasks'
-  import { Clock, Calendar, MessageSquare, MoreVertical } from 'lucide-svelte'
+  import { Clock, Calendar, MessageSquare, MoreVertical, Circle } from 'lucide-svelte'
   import { clsx } from 'clsx'
 
   let {
@@ -13,12 +13,12 @@
 
   function priorityColor(priority: string): string {
     const colors: Record<string, string> = {
-      p0: '#ef4444', // Red 500
-      p1: '#f97316', // Orange 500
-      p2: '#eab308', // Yellow 500
-      p3: '#71717a', // Zinc 500
+      p0: '#db4c3f', // Todoist Red
+      p1: '#ff9a00', // Todoist Orange
+      p2: '#246fe0', // Todoist Blue
+      p3: '#808080', // Todoist Gray
     }
-    return colors[priority.toLowerCase()] ?? '#71717a'
+    return colors[priority.toLowerCase()] ?? '#808080'
   }
 
   function formatDueDate(dueDate: string): string {
@@ -33,29 +33,6 @@
     new Date(task.dueDate) < new Date()
   )
 
-  let isDeadlinePast = $derived(
-    task.deadline != null &&
-    task.status !== 'done' &&
-    new Date(task.deadline) < new Date()
-  )
-
-  function formatDwellTime(task: TaskSummary): string {
-    const dateStr = task.status === 'done' && task.completedAt
-      ? task.completedAt
-      : task.statusChangedAt
-    const date = new Date(dateStr)
-    const now = new Date()
-    const diffMs = now.getTime() - date.getTime()
-    const diffHours = Math.floor(diffMs / (1000 * 60 * 60))
-
-    if (diffHours < 1) return 'Just now'
-    if (diffHours < 24) return `${diffHours}h`
-    const diffDays = Math.floor(diffHours / 24)
-    if (diffDays < 7) return `${diffDays}d`
-    const diffWeeks = Math.floor(diffDays / 7)
-    return `${diffWeeks}w`
-  }
-
   function handleKeydown(e: KeyboardEvent) {
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault()
@@ -65,145 +42,116 @@
 </script>
 
 <div
-  class={clsx('task-card', isDeadlinePast && 'deadline-past')}
+  class="task-card-v2"
   role="button"
   tabindex="0"
   onclick={onclick}
   onkeydown={handleKeydown}
 >
-  <div class="priority-indicator" style:--p-color={priorityColor(task.priority ?? 'p3')}></div>
+  <div class="card-left">
+    <div class="priority-circle" style:--p-color={priorityColor(task.priority ?? 'p3')}>
+      <Circle size={18} strokeWidth={2} />
+    </div>
+  </div>
   
   <div class="card-content">
-    <div class="card-header">
+    <div class="card-title-row">
       <span class="task-title">{task.title}</span>
-      <button class="more-btn" aria-label="Task options">
-        <MoreVertical size={14} />
-      </button>
     </div>
 
     <div class="card-meta">
       {#if task.project?.name}
-        <span class="project-tag">{task.project.name}</span>
+        <span class="project-indicator">
+          <span class="dot"></span>
+          {task.project.name}
+        </span>
       {/if}
       
       {#if task.dueDate}
-        <div class={clsx('meta-item', isOverdue && 'overdue')}>
+        <div class={clsx('meta-item date', isOverdue && 'overdue')}>
           <Calendar size={12} />
           <span>{formatDueDate(task.dueDate)}</span>
         </div>
       {/if}
 
-      <div class="meta-item dwell">
-        <Clock size={12} />
-        <span>{formatDwellTime(task)}</span>
-      </div>
-
-      <!-- Placeholder for comments/attachments -->
-      <div class="meta-item-group">
+      {#if task.statusChangedAt}
         <div class="meta-item">
-          <MessageSquare size={12} />
-          <span>2</span>
+          <Clock size={12} />
         </div>
-      </div>
+      {/if}
     </div>
+  </div>
+
+  <div class="card-actions">
+    <button class="action-icon" aria-label="More">
+      <MoreVertical size={16} />
+    </button>
   </div>
 </div>
 
 <style>
-  .task-card {
-    position: relative;
-    background-color: var(--bg-surface);
-    border: 1px solid var(--border-main);
-    border-radius: var(--radius-md);
-    padding: 0.75rem;
-    padding-left: 1rem;
-    cursor: pointer;
-    transition: all 0.15s ease;
+  .task-card-v2 {
     display: flex;
     gap: 0.75rem;
-    overflow: hidden;
+    padding: 0.75rem 0.5rem;
+    border-bottom: 1px solid var(--border-main);
+    background-color: transparent;
+    transition: background-color 0.1s;
+    cursor: pointer;
+    position: relative;
   }
 
-  .task-card:hover {
-    border-color: var(--zinc-600);
+  .task-card-v2:hover {
     background-color: var(--bg-surface-hover);
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
   }
 
-  .priority-indicator {
-    position: absolute;
-    left: 0;
-    top: 0;
-    bottom: 0;
-    width: 3px;
-    background-color: var(--p-color);
+  .card-left {
+    padding-top: 2px;
   }
 
-  .task-card.deadline-past {
-    border-color: #ef4444;
-    background-color: rgba(239, 68, 68, 0.05);
+  .priority-circle {
+    color: var(--p-color);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0.8;
   }
 
   .card-content {
     flex: 1;
+    min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
-    min-width: 0;
-  }
-
-  .card-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    gap: 0.5rem;
+    gap: 0.25rem;
   }
 
   .task-title {
-    font-size: 0.875rem;
+    font-size: 1rem;
     font-weight: 500;
     color: var(--text-main);
     line-height: 1.4;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-  }
-
-  .more-btn {
-    opacity: 0;
-    color: var(--text-muted);
-    transition: opacity 0.15s;
-    padding: 2px;
-    border-radius: 4px;
-  }
-
-  .task-card:hover .more-btn {
-    opacity: 1;
-  }
-
-  .more-btn:hover {
-    background-color: var(--zinc-700);
-    color: var(--text-main);
   }
 
   .card-meta {
     display: flex;
     align-items: center;
-    gap: 0.75rem;
-    flex-wrap: wrap;
+    gap: 1rem;
   }
 
-  .project-tag {
-    font-size: 0.6875rem;
-    font-weight: 600;
-    color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.025em;
-    background-color: var(--zinc-800);
-    padding: 1px 6px;
-    border-radius: 4px;
+  .project-indicator {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.75rem;
+    color: var(--td-text-secondary);
+    font-weight: 500;
+  }
+
+  .project-indicator .dot {
+    width: 6px;
+    height: 6px;
+    background-color: var(--td-text-muted);
+    border-radius: 50%;
   }
 
   .meta-item {
@@ -215,18 +163,28 @@
   }
 
   .meta-item.overdue {
-    color: #ef4444;
-    font-weight: 600;
+    color: #db4c3f;
   }
 
-  .meta-item-group {
-    margin-left: auto;
+  .card-actions {
+    opacity: 0;
+    transition: opacity 0.15s;
     display: flex;
-    gap: 0.5rem;
+    align-items: center;
   }
 
-  .dwell {
-    font-size: 0.6875rem;
-    opacity: 0.8;
+  .task-card-v2:hover .card-actions {
+    opacity: 1;
+  }
+
+  .action-icon {
+    color: var(--text-muted);
+    padding: 4px;
+    border-radius: 4px;
+  }
+
+  .action-icon:hover {
+    background-color: var(--td-hover);
+    color: var(--text-main);
   }
 </style>
