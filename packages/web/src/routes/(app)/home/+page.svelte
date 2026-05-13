@@ -1,16 +1,14 @@
 <script lang="ts">
   import { activeFilterIds } from '$lib/stores/workspaces'
-  import { tasks, fetchTasks, isLoading, fetchOverdueCount } from '$lib/stores/tasks'
+  import { tasks, fetchTasks, isLoading, fetchOverdueCount, selectedTask } from '$lib/stores/tasks'
   import KanbanBoard from '$lib/components/KanbanBoard.svelte'
   import TaskCard from '$lib/components/TaskCard.svelte'
   import QuickAddInput from '$lib/components/QuickAddInput.svelte'
-  import TaskModal from '$lib/components/TaskModal.svelte'
   import { trpc } from '$lib/trpc'
   import type { TaskSummary } from '$lib/stores/tasks'
   import { Filter, SortAsc, LayoutGrid, List } from 'lucide-svelte'
   import { clsx } from 'clsx'
 
-  let selectedTask = $state<TaskSummary | null>(null)
   let showCreateModal = $state(false)
   let createModalProjectId = $state('')
   let viewMode = $state<'kanban' | 'list'>('kanban')
@@ -30,24 +28,7 @@
   }
 
   function handleTaskClick(task: TaskSummary) {
-    selectedTask = task
-  }
-
-  function closeModal() {
-    selectedTask = null
-    showCreateModal = false
-  }
-
-  function handleSaved() {
-    closeModal()
-    fetchTasks($activeFilterIds)
-    fetchOverdueCount()
-  }
-
-  function handleDeleted() {
-    closeModal()
-    fetchTasks($activeFilterIds)
-    fetchOverdueCount()
+    selectedTask.set(task)
   }
 
   function handleCreated() {
@@ -157,14 +138,6 @@
     {/if}
   </div>
 </div>
-
-{#if selectedTask}
-  <TaskModal task={selectedTask} onClose={closeModal} onSaved={handleSaved} onDeleted={handleDeleted} />
-{/if}
-
-{#if showCreateModal && createModalProjectId}
-  <TaskModal task={null} projectId={createModalProjectId} onClose={closeModal} onSaved={handleSaved} />
-{/if}
 
 <style>
   .home-page {

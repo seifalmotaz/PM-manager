@@ -8,9 +8,11 @@
   let {
     onCreated,
     onAddWithDetails,
+    autoFocus = false,
   }: {
     onCreated: () => void
     onAddWithDetails?: (projectId: string) => void
+    autoFocus?: boolean
   } = $props()
 
   interface ProjectSummary {
@@ -19,10 +21,17 @@
   }
 
   let input = $state('')
+  let inputEl = $state<HTMLInputElement>()
   let selectedProjectId = $state('')
   let projects = $state<ProjectSummary[]>([])
   let isCreating = $state(false)
   let isFocused = $state(false)
+
+  $effect(() => {
+    if (autoFocus && inputEl) {
+      inputEl.focus()
+    }
+  })
 
   // Synchronous parse
   let parsed = $derived(parseTaskInput(input))
@@ -99,6 +108,7 @@
       <input
         type="text"
         bind:value={input}
+        bind:this={inputEl}
         placeholder="e.g. Meet Seif at 5pm p1"
         onkeydown={handleKeydown}
         onfocus={() => isFocused = true}

@@ -24,6 +24,7 @@ export interface TaskSummary {
 export const tasks = writable<TaskSummary[]>([])
 export const isLoading = writable(true)
 export const overdueCount = writable(0)
+export const selectedTask = writable<TaskSummary | null>(null)
 
 export async function fetchTasks(workspaceIds: string[]) {
   if (workspaceIds.length === 0) {

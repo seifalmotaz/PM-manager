@@ -18,7 +18,13 @@
   // @ts-ignore
   import commandScore from 'command-score'
 
-  let { isOpen = $bindable(false) } = $props()
+  let {
+    isOpen = $bindable(false),
+    onNewTask,
+  }: {
+    isOpen?: boolean
+    onNewTask?: () => void
+  } = $props()
   let query = $state('')
   let selectedIndex = $state(0)
   let inputEl = $state<HTMLInputElement>()
@@ -27,7 +33,7 @@
     { id: 'go-home', title: 'Go to Home', icon: Search, type: 'command', action: () => goto('/home') },
     { id: 'go-velocity', title: 'Go to Velocity', icon: BarChart2, type: 'command', action: () => goto('/velocity') },
     { id: 'go-projects', title: 'Go to Projects', icon: Layers, type: 'command', action: () => goto('/projects') },
-    { id: 'new-task', title: 'Create New Task', icon: Plus, type: 'command', action: () => {/* Logic for new task */} },
+    { id: 'new-task', title: 'Create New Task', icon: Plus, type: 'command', action: () => { onNewTask?.() } },
     { id: 'start-timer', title: 'Start Timer', icon: Clock, type: 'command', action: () => {/* Logic for timer */} },
   ]
 

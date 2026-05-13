@@ -1,8 +1,8 @@
 <script lang="ts">
   import { page } from '$app/stores'
   import { getAuth, isAuthenticated, fetchSession } from '$lib/stores/auth.svelte'
-  import { fetchWorkspaces } from '$lib/stores/workspaces'
-  import { fetchOverdueCount } from '$lib/stores/tasks'
+  import { fetchWorkspaces, activeFilterIds } from '$lib/stores/workspaces'
+  import { fetchOverdueCount, selectedTask, fetchTasks } from '$lib/stores/tasks'
   import { 
     Home, 
     BarChart2, 
@@ -17,11 +17,18 @@
   } from 'lucide-svelte'
   import { clsx } from 'clsx'
   import CommandPalette from '$lib/components/CommandPalette.svelte'
+  import QuickAddModal from '$lib/components/QuickAddModal.svelte'
+  import WorkspaceFilter from '$lib/components/WorkspaceFilter.svelte'
+  import DeadlineBadge from '$lib/components/DeadlineBadge.svelte'
+  import TaskDetail from '$lib/components/TaskDetail.svelte'
 
   let { children } = $props()
   let isSidebarCollapsed = $state(true)
-  let isDetailPanelOpen = $state(false) // Will be driven by store later
   let isCommandPaletteOpen = $state(false)
+  let isQuickAddOpen = $state(false)
+
+  // Derive detail panel state from store
+  let isDetailPanelOpen = $derived($selectedTask !== null)
 
   $effect(() => {
     fetchSession()
@@ -32,8 +39,25 @@
     fetchOverdueCount()
   })
 
+  // Global shortcut: Cmd+N / Ctrl+N to open QuickAdd
+  $effect(() => {
+    function handleGlobalKeydown(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'n') {
+        e.preventDefault()
+        isQuickAddOpen = true
+      }
+    }
+    window.addEventListener('keydown', handleGlobalKeydown)
+    return () => window.removeEventListener('keydown', handleGlobalKeydown)
+  })
+
   function toggleSidebar() {
     isSidebarCollapsed = !isSidebarCollapsed
+  }
+
+  function handleQuickAddCreated() {
+    fetchTasks($activeFilterIds)
+    fetchOverdueCount()
   }
 
   const navItems = [
@@ -96,14 +120,19 @@
       </button>
     </div>
 
+    <div class="topbar-center">
+      <WorkspaceFilter />
+    </div>
+
     <div class="topbar-right">
+      <DeadlineBadge />
       <button class="topbar-action" title="Start Timer">
         <Clock size={20} />
       </button>
       <button class="topbar-action" title="Notifications">
         <Bell size={20} />
       </button>
-      <button class="quick-add-btn">
+      <button class="quick-add-btn" onclick={() => isQuickAddOpen = true}>
         <Plus size={20} />
         <span>New Task</span>
       </button>
@@ -129,12 +158,14 @@
     {/if}
   </main>
 
-  <CommandPalette bind:isOpen={isCommandPaletteOpen} />
+  <CommandPalette bind:isOpen={isCommandPaletteOpen} onNewTask={() => isQuickAddOpen = true} />
+
+  <QuickAddModal bind:isOpen={isQuickAddOpen} onCreated={handleQuickAddCreated} />
 
   <!-- Detail Panel (Right) -->
-  {#if isDetailPanelOpen}
+  {#if isDetailPanelOpen && $selectedTask}
     <aside class="detail-panel">
-      <!-- Detail panel content will go here -->
+      <TaskDetail task={$selectedTask} />
     </aside>
   {/if}
 </div>
@@ -284,6 +315,12 @@
   .topbar-left {
     flex: 1;
     max-width: 600px;
+  }
+
+  .topbar-center {
+    flex: 1;
+    display: flex;
+    justify-content: center;
   }
 
   .command-trigger {
