@@ -3,12 +3,18 @@ import { authRouter } from './modules/auth/auth.router'
 import { workspaceRouter } from './modules/workspace/workspace.router'
 import { projectRouter } from './modules/project/project.router'
 import { taskRouter } from './modules/task/task.router'
+import { sprintRouter } from './modules/sprint/sprint.router'
+import { velocityRouter } from './modules/velocity/velocity.router'
+import { capacityRouter } from './modules/sprint/capacity.router'
 
 export const appRouter = router({
   auth: authRouter,
   workspace: workspaceRouter,
   project: projectRouter,
   task: taskRouter,
+  sprint: sprintRouter,
+  velocity: velocityRouter,
+  capacity: capacityRouter,
 })
 
 export type AppRouter = typeof appRouter

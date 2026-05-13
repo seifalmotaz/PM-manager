@@ -4,6 +4,7 @@ import { eq, and, lt, ne, asc, inArray, count } from 'drizzle-orm'
 import { createAuditLog, auditFieldChange } from '../../shared/audit/audit.service'
 import { projectService } from '../project/project.service'
 import { workspaceService } from '../workspace/workspace.service'
+import { sprintService } from '../sprint/sprint.service'
 import { TRPCError } from '@trpc/server'
 import { parseTaskInput } from './nlp-parser'
 import type { ParsedTaskInput } from './nlp-parser'
@@ -65,7 +66,29 @@ async function listTasks(
     .orderBy(asc(tasks.createdAt))
 }
 
-async function getTask(id: string, userId: string) {
+type TaskRow = {
+  id: string
+  projectId: string
+  title: string
+  description: string | null
+  status: string
+  priority: string | null
+  storyPoints: string | null
+  estimatedHours: string | null
+  assigneeId: string | null
+  dueDate: Date | null
+  deadline: Date | null
+  sprintId: string | null
+  sprintFlag: string | null
+  statusChangedAt: Date
+  startedAt: Date | null
+  completedAt: Date | null
+  createdAt: Date
+  updatedAt: Date
+  project: typeof projects.$inferSelect | null
+}
+
+async function getTask(id: string, userId: string): Promise<TaskRow> {
   const rows = await db
     .select({
       task: tasks,
@@ -93,6 +116,22 @@ async function createTask(input: CreateTaskInput, userId: string) {
   // Verify project access
   await projectService.getProject(input.projectId, userId)
 
+  // Sprint lock enforcement
+  if (input.sprintId) {
+    const sprint = await sprintService.getSprint(input.sprintId, userId)
+    if (sprintService.isSprintLocked(sprint)) {
+      throw new TRPCError({
+        code: 'PRECONDITION_FAILED',
+        message: 'Cannot assign tasks to a completed sprint',
+      })
+    }
+  }
+
+  // If sprintFlag is provided but no sprintId, clear the flag
+  if (input.sprintFlag && !input.sprintId) {
+    input.sprintFlag = undefined
+  }
+
   const dueDateValue = input.dueDate ? new Date(input.dueDate) : undefined
 
   const [task] = await db
@@ -107,7 +146,7 @@ async function createTask(input: CreateTaskInput, userId: string) {
       assigneeId: input.assigneeId ?? null,
       dueDate: dueDateValue ?? null,
       sprintId: input.sprintId ?? null,
-      sprintFlag: input.sprintFlag ?? null,
+      sprintFlag: (input.sprintId && input.sprintFlag) ? input.sprintFlag : null,
       status: 'todo',
       statusChangedAt: new Date(),
     })
@@ -134,7 +173,41 @@ async function updateTask(
   for (const [key, value] of Object.entries(updates)) {
     if (key === 'id') continue
 
-    let currentValue = (task as any)[key]
+    // Sprint lock enforcement when changing sprintId
+    if (key === 'sprintId') {
+      const newSprintId = value as string | null | undefined
+
+      if (newSprintId) {
+        // Verify the sprint exists and is not locked
+        const sprint = await sprintService.getSprint(newSprintId, userId)
+        if (sprintService.isSprintLocked(sprint)) {
+          throw new TRPCError({
+            code: 'PRECONDITION_FAILED',
+            message: 'Cannot assign tasks to a completed sprint',
+          })
+        }
+      }
+
+      // Audit log for sprint reassignment
+      auditFieldChange(
+        'task', id, userId, 'sprintId',
+        task.sprintId || 'none',
+        newSprintId || 'none',
+      )
+
+      // If sprintId is being set to null (moving to Backlog), also clear sprintFlag
+      if (newSprintId === null || newSprintId === undefined) {
+        updateData.sprintFlag = null
+      }
+
+      // Apply sprintId update directly (skip generic loop fallthrough)
+      if (newSprintId !== task.sprintId) {
+        updateData.sprintId = newSprintId
+      }
+      continue
+    }
+
+    let currentValue = (task as Record<string, unknown>)[key]
 
     // Drizzle returns decimal columns as strings — coerce to number for comparison
     if (currentValue !== undefined && currentValue !== null && (key === 'storyPoints' || key === 'estimatedHours')) {

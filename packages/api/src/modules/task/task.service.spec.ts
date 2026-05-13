@@ -1,15 +1,18 @@
 import { describe, test, expect, beforeAll, afterAll } from 'bun:test'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { db } from '../../db/connection'
-import { users, workspaces, workspaceMembers, projects, tasks, auditLogs } from '../../db/schema'
+import { users, workspaces, workspaceMembers, projects, tasks, sprints, auditLogs } from '../../db/schema'
 import { eq, and } from 'drizzle-orm'
 import { taskService } from './task.service'
+import { sprintService } from '../sprint/sprint.service'
 
 let testUserId: string
 let testUser2Id: string
 let testWorkspaceId: string
 let testProjectId: string
 let testProject2Id: string
+let completedSprintId: string
+let activeSprintId: string
 
 beforeAll(async () => {
   // Create test users
@@ -60,10 +63,42 @@ beforeAll(async () => {
     })
     .returning()
   testProject2Id = project2.id
+
+  // Create past completed sprint for lock enforcement tests
+  const pastStart = new Date(Date.now() - 86400000 * 28)
+  const pastEnd = new Date(Date.now() - 86400000 * 14)
+
+  const [pastSprint] = await db
+    .insert(sprints)
+    .values({
+      projectId: testProjectId,
+      name: 'Past Completed Sprint',
+      startDate: pastStart,
+      endDate: pastEnd,
+      status: 'completed',
+    })
+    .returning()
+  completedSprintId = pastSprint.id
+
+  // Create active sprint for normal operations
+  const activeStart = new Date(Date.now() - 86400000)
+  const activeEnd = new Date(Date.now() + 86400000 * 14)
+  const [activeSprint] = await db
+    .insert(sprints)
+    .values({
+      projectId: testProjectId,
+      name: 'Active Sprint',
+      startDate: activeStart,
+      endDate: activeEnd,
+      status: 'active',
+    })
+    .returning()
+  activeSprintId = activeSprint.id
 })
 
 afterAll(async () => {
   // Clean up in reverse dependency order
+
   // Delete all tasks created in this test
   await db.delete(tasks).where(eq(tasks.projectId, testProjectId))
   await db.delete(tasks).where(eq(tasks.projectId, testProject2Id))
@@ -77,6 +112,14 @@ afterAll(async () => {
 
   // Delete workspace members
   await db.delete(workspaceMembers).where(eq(workspaceMembers.workspaceId, testWorkspaceId))
+
+  // Delete test sprints
+  if (completedSprintId) {
+    await db.delete(sprints).where(eq(sprints.id, completedSprintId))
+  }
+  if (activeSprintId) {
+    await db.delete(sprints).where(eq(sprints.id, activeSprintId))
+  }
 
   // Delete workspace
   await db.delete(workspaces).where(eq(workspaces.id, testWorkspaceId))
@@ -639,6 +682,208 @@ describe('taskService', () => {
       const ids = result.map((t: any) => t.id)
       expect(ids).toContain(homeTaskId)
       expect(result.length).toBeGreaterThanOrEqual(1)
+    })
+  })
+
+  describe('sprint enforcement', () => {
+    test('createTask rejects assignment to completed sprint', async () => {
+      await expect(
+        taskService.createTask(
+          {
+            projectId: testProjectId,
+            title: 'Task in completed sprint',
+            sprintId: completedSprintId,
+          },
+          testUserId,
+        ),
+      ).rejects.toThrow(/completed sprint/)
+    })
+
+    test('updateTask rejects reassignment to completed sprint', async () => {
+      // Create a task in active sprint first
+      const [task] = await db
+        .insert(tasks)
+        .values({
+          projectId: testProjectId,
+          title: 'Task to reassign',
+          sprintId: activeSprintId,
+        })
+        .returning()
+
+      // Try to move it to completed sprint
+      await expect(
+        taskService.updateTask(
+          task.id,
+          { sprintId: completedSprintId },
+          testUserId,
+        ),
+      ).rejects.toThrow(/completed sprint/)
+
+      // Clean up
+      await db.delete(tasks).where(eq(tasks.id, task.id))
+    })
+
+    test('createTask with active sprint and no sprintFlag defaults to null', async () => {
+      const result = await taskService.createTask(
+        {
+          projectId: testProjectId,
+          title: 'Task in active sprint',
+          sprintId: activeSprintId,
+        },
+        testUserId,
+      )
+
+      expect(result.sprintId).toBe(activeSprintId)
+      expect(result.sprintFlag).toBeNull()
+
+      // Clean up
+      await db.delete(tasks).where(eq(tasks.id, result.id))
+    })
+
+    test('createTask with active sprint and sprintFlag stores correctly', async () => {
+      const result = await taskService.createTask(
+        {
+          projectId: testProjectId,
+          title: 'Flagged task',
+          sprintId: activeSprintId,
+          sprintFlag: 'unscheduled',
+        },
+        testUserId,
+      )
+
+      expect(result.sprintId).toBe(activeSprintId)
+      expect(result.sprintFlag).toBe('unscheduled')
+
+      // Clean up
+      await db.delete(tasks).where(eq(tasks.id, result.id))
+    })
+
+    test('sprintFlag preserved when changing sprintId without explicit sprintFlag update', async () => {
+      // Create task with sprintFlag
+      const [task] = await db
+        .insert(tasks)
+        .values({
+          projectId: testProjectId,
+          title: 'Flagged task to move',
+          sprintId: activeSprintId,
+          sprintFlag: 'pulled_forward',
+        })
+        .returning()
+
+      // Create another active sprint to move to
+      const newSprintStart = new Date(Date.now() - 86400000)
+      const newSprintEnd = new Date(Date.now() + 86400000 * 14)
+      const [newSprint] = await db
+        .insert(sprints)
+        .values({
+          projectId: testProjectId,
+          name: 'Second Active Sprint',
+          startDate: newSprintStart,
+          endDate: newSprintEnd,
+          status: 'active',
+        })
+        .returning()
+
+      // Update sprintId only (sprintFlag should be preserved)
+      const result = await taskService.updateTask(
+        task.id,
+        { sprintId: newSprint.id },
+        testUserId,
+      )
+
+      expect(result.sprintId).toBe(newSprint.id)
+      expect(result.sprintFlag).toBe('pulled_forward')
+
+      // Clean up
+      await db.delete(tasks).where(eq(tasks.id, task.id))
+      await db.delete(sprints).where(eq(sprints.id, newSprint.id))
+    })
+
+    test('sprintFlag cleared when moving to Backlog (sprintId=null)', async () => {
+      // Create task with sprintFlag
+      const [task] = await db
+        .insert(tasks)
+        .values({
+          projectId: testProjectId,
+          title: 'Task to move to backlog',
+          sprintId: activeSprintId,
+          sprintFlag: 'unscheduled',
+        })
+        .returning()
+
+      // Move to backlog
+      const result = await taskService.updateTask(
+        task.id,
+        { sprintId: null },
+        testUserId,
+      )
+
+      expect(result.sprintId).toBeNull()
+      expect(result.sprintFlag).toBeNull()
+
+      // Clean up
+      await db.delete(tasks).where(eq(tasks.id, task.id))
+    })
+
+    test('audit log created for sprint reassignment', async () => {
+      // Create task in active sprint
+      const [task] = await db
+        .insert(tasks)
+        .values({
+          projectId: testProjectId,
+          title: 'Task for audit test',
+          sprintId: activeSprintId,
+        })
+        .returning()
+
+      // Clear any existing audit logs
+      await db.delete(auditLogs).where(eq(auditLogs.entityId, task.id))
+
+      // Create another sprint to move to
+      const newSprintStart = new Date(Date.now() - 86400000)
+      const newSprintEnd = new Date(Date.now() + 86400000 * 14)
+      const [newSprint] = await db
+        .insert(sprints)
+        .values({
+          projectId: testProjectId,
+          name: 'Audit Test Sprint',
+          startDate: newSprintStart,
+          endDate: newSprintEnd,
+          status: 'active',
+        })
+        .returning()
+
+      // Update sprintId
+      await taskService.updateTask(
+        task.id,
+        { sprintId: newSprint.id },
+        testUserId,
+      )
+
+      // Wait for fire-and-forget audit writes
+      await sleep(150)
+
+      // Verify audit log was created for sprintId change
+      const logs = await db
+        .select()
+        .from(auditLogs)
+        .where(
+          and(
+            eq(auditLogs.entityType, 'task'),
+            eq(auditLogs.entityId, task.id),
+            eq(auditLogs.action, 'updated'),
+            eq(auditLogs.field, 'sprintId'),
+          ),
+        )
+
+      expect(logs.length).toBeGreaterThanOrEqual(1)
+      expect(logs[0].oldValue).toBe(activeSprintId)
+      expect(logs[0].newValue).toBe(newSprint.id)
+
+      // Clean up
+      await db.delete(auditLogs).where(eq(auditLogs.entityId, task.id))
+      await db.delete(tasks).where(eq(tasks.id, task.id))
+      await db.delete(sprints).where(eq(sprints.id, newSprint.id))
     })
   })
 })

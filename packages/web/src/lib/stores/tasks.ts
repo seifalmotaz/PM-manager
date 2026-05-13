@@ -12,6 +12,8 @@ export interface TaskSummary {
   assigneeId?: string | null
   dueDate?: string | null
   deadline?: string | null
+  sprintId?: string | null
+  sprintFlag?: string | null
   statusChangedAt: string
   startedAt?: string | null
   completedAt?: string | null

@@ -101,7 +101,7 @@
     </header>
 
     <div class="quick-add-wrapper">
-      <QuickAddInput onCreated={handleCreated} />
+      <QuickAddInput onCreated={handleCreated} projectId={$page.params.id} />
     </div>
   </div>
 

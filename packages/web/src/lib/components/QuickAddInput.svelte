@@ -9,10 +9,12 @@
     onCreated,
     onAddWithDetails,
     autoFocus = false,
+    projectId = '',
   }: {
     onCreated: () => void
     onAddWithDetails?: (projectId: string) => void
     autoFocus?: boolean
+    projectId?: string
   } = $props()
 
   interface ProjectSummary {
@@ -22,6 +24,8 @@
 
   let input = $state('')
   let inputEl = $state<HTMLInputElement>()
+  let containerEl = $state<HTMLDivElement>()
+  let blurTimeout = $state<ReturnType<typeof setTimeout>>()
   let selectedProjectId = $state('')
   let projects = $state<ProjectSummary[]>([])
   let isCreating = $state(false)
@@ -31,6 +35,20 @@
   $effect(() => {
     if (autoFocus && inputEl) {
       inputEl.focus()
+    }
+  })
+
+  // If a projectId is provided, auto-select it (project detail pages)
+  $effect(() => {
+    if (projectId) {
+      selectedProjectId = projectId
+    }
+  })
+
+  // Clean up blur timeout on unmount
+  $effect(() => {
+    return () => {
+      clearTimeout(blurTimeout)
     }
   })
 
@@ -128,9 +146,27 @@
       handleSubmit()
     }
   }
+
+  function handleInputFocus() {
+    if (blurTimeout) {
+      clearTimeout(blurTimeout)
+    }
+    isFocused = true
+  }
+
+  function handleInputBlur() {
+    // Cancel any pending blur timeout
+    clearTimeout(blurTimeout)
+    // Delay blur to check if focus moved inside the component
+    blurTimeout = setTimeout(() => {
+      if (containerEl && !containerEl.contains(document.activeElement)) {
+        isFocused = false
+      }
+    }, 0)
+  }
 </script>
 
-<div class={clsx('quick-add-v2', isFocused && 'focused', (isCreating || isLoadingProjects) && 'loading')}>
+<div class={clsx('quick-add-v2', isFocused && 'focused', (isCreating || isLoadingProjects) && 'loading')} bind:this={containerEl} onfocusout={handleInputBlur}>
   <div class="input-row">
     <div class="input-wrapper">
       <input
@@ -139,8 +175,8 @@
         bind:this={inputEl}
         placeholder="e.g. Meet Seif at 5pm p1"
         onkeydown={handleKeydown}
-        onfocus={() => isFocused = true}
-        onblur={() => isFocused = false}
+        onfocus={handleInputFocus}
+        onblur={handleInputBlur}
 disabled={isCreating || isLoadingProjects}
       />
     </div>
@@ -180,14 +216,16 @@ disabled={isCreating || isLoadingProjects}
         {/if}
       </div>
 
-      <div class="project-picker-inline">
-        <Layers size={14} class="icon-muted" />
-        <select bind:value={selectedProjectId} disabled={isCreating}>
-          {#each projects as project (project.id)}
-            <option value={project.id}>{project.name}</option>
-          {/each}
-        </select>
-      </div>
+      {#if !projectId}
+        <div class="project-picker-inline">
+          <Layers size={14} class="icon-muted" />
+          <select bind:value={selectedProjectId} disabled={isCreating}>
+            {#each projects as project (project.id)}
+              <option value={project.id}>{project.name}</option>
+            {/each}
+          </select>
+        </div>
+      {/if}
     </div>
   {/if}
 </div>
