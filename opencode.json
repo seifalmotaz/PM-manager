@@ -10,4 +10,16 @@
             ]
         },
     },
+    "mcp": {
+        "postgres": {
+            "enabled": true,
+            "type": "local",
+            "command": [
+                "npx",
+                "-y",
+                "@modelcontextprotocol/server-postgres",
+                "postgresql://postgres:password@localhost:5432/saha"
+            ]
+        }
+    }
 }
