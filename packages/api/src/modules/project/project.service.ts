@@ -3,6 +3,7 @@ import { projects } from '../../db/schema'
 import { eq, asc } from 'drizzle-orm'
 import { createAuditLog } from '../../shared/audit/audit.service'
 import { workspaceService } from '../workspace/workspace.service'
+import { TRPCError } from '@trpc/server'
 
 async function listProjects(workspaceId: string | undefined, userId: string) {
   if (workspaceId) {
@@ -38,7 +39,7 @@ async function listProjects(workspaceId: string | undefined, userId: string) {
 async function getProject(id: string, userId: string) {
   const [project] = await db.select().from(projects).where(eq(projects.id, id)).limit(1)
 
-  if (!project) throw new Error('Project not found')
+  if (!project) throw new TRPCError({ code: 'NOT_FOUND', message: 'Project not found' })
 
   // Verify workspace membership
   await workspaceService.getWorkspace(project.workspaceId, userId)

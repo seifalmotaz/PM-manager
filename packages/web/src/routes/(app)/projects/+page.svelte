@@ -328,10 +328,6 @@
     padding: 2rem 0;
   }
 
-  .empty-icon {
-    opacity: 0.5;
-  }
-
   .spinner {
     width: 24px;
     height: 24px;

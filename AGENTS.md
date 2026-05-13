@@ -21,3 +21,4 @@ Always make the `coder` agent use the svelte skills that are avaliable to write 
 1. Separate the frontend and backend phases in the plan.
 2. ALways use the `coder` agent to write the code.
 3. Make the phase not too long, we do not have limit for the number of phases in plan but we have limit for context lenght in each phase, but also do not split the phase in too many small pieces of code to commit.
+4. Write for the `coder` agent to check for type errors with `bun run typecheck` before finishing the plan and give the handshake report.

@@ -3,6 +3,8 @@ import { tasks, projects } from '../../db/schema'
 import { eq, and, lt, ne, asc, inArray, count } from 'drizzle-orm'
 import { createAuditLog, auditFieldChange } from '../../shared/audit/audit.service'
 import { projectService } from '../project/project.service'
+import { workspaceService } from '../workspace/workspace.service'
+import { TRPCError } from '@trpc/server'
 import { parseTaskInput } from './nlp-parser'
 import type { ParsedTaskInput } from './nlp-parser'
 
@@ -33,6 +35,16 @@ async function listTasks(
 ): Promise<Record<string, unknown>[]> {
   const conditions: any[] = []
 
+  if (filters.workspaceIds && filters.workspaceIds.length > 0) {
+    const projRows = await db
+      .select({ id: projects.id })
+      .from(projects)
+      .where(inArray(projects.workspaceId, filters.workspaceIds))
+    const projIds = projRows.map(p => p.id)
+    if (projIds.length === 0) return []
+    conditions.push(inArray(tasks.projectId, projIds))
+  }
+
   if (filters.projectId) {
     conditions.push(eq(tasks.projectId, filters.projectId))
   }
@@ -54,13 +66,27 @@ async function listTasks(
 }
 
 async function getTask(id: string, userId: string) {
-  const [task] = await db.select().from(tasks).where(eq(tasks.id, id)).limit(1)
-  if (!task) throw new Error('Task not found')
+  const rows = await db
+    .select({
+      task: tasks,
+      project: projects,
+    })
+    .from(tasks)
+    .leftJoin(projects, eq(tasks.projectId, projects.id))
+    .where(eq(tasks.id, id))
+    .limit(1)
+
+  if (rows.length === 0) throw new TRPCError({ code: 'NOT_FOUND', message: 'Task not found' })
+
+  const row = rows[0]
 
   // Verify project access
-  await projectService.getProject(task.projectId, userId)
+  await projectService.getProject(row.task.projectId, userId)
 
-  return task
+  return {
+    ...row.task,
+    project: row.project,
+  }
 }
 
 async function createTask(input: CreateTaskInput, userId: string) {
@@ -108,12 +134,21 @@ async function updateTask(
   for (const [key, value] of Object.entries(updates)) {
     if (key === 'id') continue
 
-    const currentValue = (task as any)[key]
+    let currentValue = (task as any)[key]
+
+    // Drizzle returns decimal columns as strings — coerce to number for comparison
+    if (currentValue !== undefined && currentValue !== null && (key === 'storyPoints' || key === 'estimatedHours')) {
+      currentValue = Number(currentValue)
+    }
 
     // Handle date field conversions
     let normalizedValue = value
-    if ((key === 'dueDate' || key === 'deadline') && typeof value === 'string') {
-      normalizedValue = new Date(value)
+    if (key === 'dueDate' || key === 'deadline') {
+      if (value === null) {
+        normalizedValue = null
+      } else if (typeof value === 'string') {
+        normalizedValue = new Date(value)
+      }
     }
 
     if (normalizedValue !== undefined && currentValue !== normalizedValue) {
@@ -178,6 +213,19 @@ async function changeStatus(id: string, newStatus: string, userId: string) {
     userId,
   })
 
+  // If task is first entering in_progress, audit the startedAt timestamp
+  if (newStatus === 'in_progress' && !task.startedAt) {
+    await createAuditLog({
+      entityType: 'task',
+      entityId: id,
+      action: 'updated',
+      field: 'startedAt',
+      oldValue: undefined,
+      newValue: now.toISOString(),
+      userId,
+    })
+  }
+
   // If reopening from done, create additional audit entry for completedAt clearing
   if (oldStatus === 'done' && newStatus !== 'done') {
     await createAuditLog({
@@ -195,10 +243,25 @@ async function changeStatus(id: string, newStatus: string, userId: string) {
 }
 
 async function getOverdueCount(userId: string): Promise<number> {
+  const userWss = await workspaceService.listUserWorkspaces(userId)
+  const wsIds = userWss.map(w => w.id)
+  if (wsIds.length === 0) return 0
+
+  const projRows = await db
+    .select({ id: projects.id })
+    .from(projects)
+    .where(inArray(projects.workspaceId, wsIds))
+  const projIds = projRows.map(p => p.id)
+  if (projIds.length === 0) return 0
+
   const [result] = await db
     .select({ value: count() })
     .from(tasks)
-    .where(and(lt(tasks.deadline, new Date()), ne(tasks.status, 'done')))
+    .where(and(
+      lt(tasks.deadline, new Date()),
+      ne(tasks.status, 'done'),
+      inArray(tasks.projectId, projIds)
+    ))
 
   return result?.value ?? 0
 }
@@ -221,9 +284,7 @@ async function listHome(workspaceIds: string[], userId: string) {
   // Note: userId is available for future use (e.g., filtering by assigned tasks)
   void userId
 
-  if (workspaceIds.length === 0) {
-    return db.select().from(tasks).orderBy(asc(tasks.createdAt))
-  }
+  if (workspaceIds.length === 0) return []
 
   // Find projects belonging to the given workspaces
   const projRows = await db
@@ -235,11 +296,20 @@ async function listHome(workspaceIds: string[], userId: string) {
 
   if (projectIds.length === 0) return []
 
-  return db
-    .select()
+  const rows = await db
+    .select({
+      task: tasks,
+      project: projects,
+    })
     .from(tasks)
+    .leftJoin(projects, eq(tasks.projectId, projects.id))
     .where(inArray(tasks.projectId, projectIds))
     .orderBy(asc(tasks.createdAt))
+
+  return rows.map(row => ({
+    ...row.task,
+    project: row.project,
+  }))
 }
 
 export const taskService = {

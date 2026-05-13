@@ -165,7 +165,9 @@
   <!-- Detail Panel (Right) -->
   {#if isDetailPanelOpen && $selectedTask}
     <aside class="detail-panel">
-      <TaskDetail task={$selectedTask} />
+      {#key $selectedTask.id}
+        <TaskDetail task={$selectedTask} onRefresh={() => { fetchTasks($activeFilterIds); fetchOverdueCount() }} />
+      {/key}
     </aside>
   {/if}
 </div>

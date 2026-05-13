@@ -77,13 +77,36 @@
       const p = parseTaskInput(trimmedInput)
       // Use the parsed title (stripped of shortcuts), or the full input if stripping results in empty
       const finalTitle = p.title || trimmedInput
-      
+
+      // Resolve @username to assigneeId
+      let assigneeId: string | undefined = undefined
+      if (p.assigneeUsername) {
+        try {
+          const project = await trpc.project.byId.query({ id: selectedProjectId })
+          if (project && project.workspaceId) {
+            const membersResult = await trpc.workspace.members.query({ workspaceId: project.workspaceId })
+            const matched = (membersResult as any[]).find(
+              (m) => m.user?.name?.toLowerCase() === p.assigneeUsername?.toLowerCase()
+            )
+            if (matched) {
+              assigneeId = matched.userId
+            }
+          }
+        } catch {
+          // Silently fail — task still gets created without assignee
+        }
+      }
+
+      // Also call server-side parser for validation (fire-and-forget)
+      trpc.task.parse.query({ input: trimmedInput }).catch(() => {})
+
       await trpc.task.create.mutate({
         projectId: selectedProjectId,
         title: finalTitle,
         priority: p.priority ?? undefined,
         storyPoints: p.storyPoints ?? undefined,
         dueDate: p.dueDate ? p.dueDate.toISOString() : undefined,
+        assigneeId,
       })
       input = ''
       onCreated()

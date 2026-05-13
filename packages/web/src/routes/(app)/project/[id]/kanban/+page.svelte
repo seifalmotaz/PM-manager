@@ -17,6 +17,20 @@
     loadTasks(id)
   })
 
+  // Re-fetch tasks when the detail panel closes
+  let wasPanelOpen = $state(false)
+
+  $effect(() => {
+    const st = $selectedTask
+    if (st !== null) {
+      wasPanelOpen = true
+    } else if (wasPanelOpen) {
+      // Panel just closed — refresh
+      wasPanelOpen = false
+      loadTasks($page.params.id)
+    }
+  })
+
   async function loadTasks(projectId: string) {
     isLoading = true
     try {

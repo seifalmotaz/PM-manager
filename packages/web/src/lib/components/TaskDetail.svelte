@@ -1,31 +1,47 @@
 <script lang="ts">
   import type { TaskSummary } from '$lib/stores/tasks'
-  import { selectedTask, fetchOverdueCount, fetchTasks } from '$lib/stores/tasks'
-  import { activeFilterIds } from '$lib/stores/workspaces'
+  import { selectedTask } from '$lib/stores/tasks'
   import { trpc } from '$lib/trpc'
-  import { X, Tag, Calendar, User, Clock, Trash2, CheckCircle2 } from 'lucide-svelte'
+  import { X, Tag, Calendar, User, Clock, Trash2, CheckCircle2, Hash, AlertTriangle, Layers } from 'lucide-svelte'
   import { clsx } from 'clsx'
 
-  let { task }: { task: TaskSummary } = $props()
+  let { task, onRefresh }: { task: TaskSummary; onRefresh?: () => void } = $props()
 
+  // svelte-ignore state_referenced_locally
   let title = $state(task.title)
+  // svelte-ignore state_referenced_locally
   let description = $state(task.description ?? '')
+  // svelte-ignore state_referenced_locally
   let priority = $state<string | null>(task.priority ?? null)
+  // svelte-ignore state_referenced_locally
   let dueDate = $state<string | null>(task.dueDate ?? null)
+  // svelte-ignore state_referenced_locally
   let storyPoints = $state<number | null>(task.storyPoints ?? null)
+  // svelte-ignore state_referenced_locally
   let deadline = $state<string | null>(task.deadline ?? null)
   let isSaving = $state(false)
   let isDeleting = $state(false)
   let openPopover = $state<string | null>(null)
+  let members = $state<Array<{ userId: string; user: { id: string; name: string; email: string; avatarUrl?: string | null } }>>([])
+  let isLoadingMembers = $state(false)
 
-  // Reset form when task changes
   $effect(() => {
-    title = task.title
-    description = task.description ?? ''
-    priority = task.priority ?? null
-    dueDate = task.dueDate ?? null
-    storyPoints = task.storyPoints ?? null
-    deadline = task.deadline ?? null
+    async function loadMembers() {
+      if (!task.projectId) return
+      isLoadingMembers = true
+      try {
+        const project = await trpc.project.byId.query({ id: task.projectId })
+        if (project && project.workspaceId) {
+          const result = await trpc.workspace.members.query({ workspaceId: project.workspaceId })
+          members = Array.isArray(result) ? result : []
+        }
+      } catch {
+        members = []
+      } finally {
+        isLoadingMembers = false
+      }
+    }
+    loadMembers()
   })
 
   function close() {
@@ -36,8 +52,7 @@
     try {
       await trpc.task.update.mutate({ id: task.id, [field]: value } as any)
       // Optimistically update the store task if needed, or just refresh
-      fetchTasks($activeFilterIds)
-      fetchOverdueCount()
+      onRefresh?.()
     } catch (err) {
       console.error(`Failed to update ${field}:`, err)
     }
@@ -62,8 +77,7 @@
     try {
       await trpc.task.delete.mutate({ id: task.id })
       selectedTask.set(null)
-      fetchTasks($activeFilterIds)
-      fetchOverdueCount()
+      onRefresh?.()
     } catch (err) {
       console.error('Failed to delete task:', err)
     } finally {
@@ -102,7 +116,7 @@
   async function toggleComplete() {
     const newStatus = task.status === 'done' ? 'todo' : 'done'
     await trpc.task.changeStatus.mutate({ id: task.id, status: newStatus as any })
-    fetchTasks($activeFilterIds)
+    onRefresh?.()
   }
 </script>
 
@@ -138,7 +152,41 @@
     <div class="metadata-grid">
       <div class="meta-row">
         <div class="meta-label"><User size={14} /> Assignee</div>
-        <button class="meta-value stub">Unassigned</button>
+        <div class="meta-value-wrapper">
+          <button class="meta-value" onclick={() => togglePopover('assignee')}>
+            {#if task.assigneeId && members.length > 0}
+              {@const assigned = members.find(m => m.userId === task.assigneeId)}
+              {assigned?.user?.name ?? 'Unknown'}
+            {:else}
+              Unassigned
+            {/if}
+          </button>
+          {#if openPopover === 'assignee'}
+            <div class="popover">
+              <button 
+                class="popover-item" 
+                onclick={() => {
+                  updateField('assigneeId', null)
+                  openPopover = null
+                }}
+              >
+                Unassigned
+              </button>
+              {#each members as member (member.userId)}
+                <button 
+                  class="popover-item" 
+                  class:active={task.assigneeId === member.userId}
+                  onclick={() => {
+                    updateField('assigneeId', member.userId)
+                    openPopover = null
+                  }}
+                >
+                  {member.user?.name ?? member.user?.email ?? 'Unknown'}
+                </button>
+              {/each}
+            </div>
+          {/if}
+        </div>
       </div>
 
       <div class="meta-row">
@@ -166,6 +214,30 @@
       </div>
 
       <div class="meta-row">
+        <div class="meta-label"><AlertTriangle size={14} /> Deadline</div>
+        <div class="meta-value-wrapper">
+          <button class="meta-value" onclick={() => togglePopover('deadline')}>
+            {deadline ? formatDateLabel(deadline) : 'Set deadline'}
+          </button>
+          {#if openPopover === 'deadline'}
+            <div class="popover">
+              <input 
+                type="date" 
+                value={deadline?.split('T')[0] ?? ''} 
+                onchange={(e) => {
+                  const val = e.currentTarget.value
+                  const iso = val ? new Date(val + 'T00:00:00').toISOString() : null
+                  deadline = iso
+                  updateField('deadline', iso)
+                  openPopover = null
+                }}
+              />
+            </div>
+          {/if}
+        </div>
+      </div>
+
+      <div class="meta-row">
         <div class="meta-label"><Tag size={14} /> Priority</div>
         <div class="meta-value-wrapper">
           <button class="meta-value" onclick={() => togglePopover('priority')}>
@@ -181,6 +253,31 @@
             </div>
           {/if}
         </div>
+      </div>
+
+      <div class="meta-row">
+        <div class="meta-label"><Hash size={14} /> Story Points</div>
+        <div class="meta-value-wrapper">
+          <input
+            type="number"
+            class="meta-input"
+            min="0"
+            step="0.5"
+            value={storyPoints ?? ''}
+            onblur={(e) => {
+              const val = e.currentTarget.value
+              const num = val ? parseFloat(val) : null
+              storyPoints = num
+              updateField('storyPoints', num)
+            }}
+            placeholder="0"
+          />
+        </div>
+      </div>
+
+      <div class="meta-row">
+        <div class="meta-label"><Layers size={14} /> Sprint</div>
+        <button class="meta-value stub">Not in a sprint</button>
       </div>
     </div>
 
@@ -360,6 +457,30 @@
 
   .popover-item:hover {
     background-color: var(--bg-surface-hover);
+  }
+
+  .popover-item.active {
+    background-color: var(--brand-primary-alpha);
+    color: var(--brand-primary);
+  }
+
+  .meta-input {
+    font-size: 0.875rem;
+    color: var(--text-main);
+    font-weight: 500;
+    padding: 0.25rem 0.5rem;
+    margin-left: -0.5rem;
+    border-radius: 4px;
+    border: 1px solid transparent;
+    background: transparent;
+    width: 80px;
+    transition: border-color 0.15s;
+  }
+
+  .meta-input:focus {
+    border-color: var(--border-main);
+    background-color: var(--bg-app);
+    outline: none;
   }
 
   .description-section {

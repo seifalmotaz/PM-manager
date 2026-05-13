@@ -53,3 +53,7 @@ export async function fetchOverdueCount() {
     console.error('Failed to fetch overdue count:', err)
   }
 }
+
+export function refreshTasks(workspaceIds: string[]) {
+  return fetchTasks(workspaceIds)
+}

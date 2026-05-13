@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { TaskSummary } from '$lib/stores/tasks'
-  import { Clock, Calendar, MessageSquare, MoreVertical, Circle } from 'lucide-svelte'
+  import { Clock, Calendar, MoreVertical } from 'lucide-svelte'
   import { clsx } from 'clsx'
 
   let {
@@ -21,6 +21,17 @@
     return colors[priority.toLowerCase()] ?? '#808080'
   }
 
+  function formatDwellTime(changedAt: string): string {
+    const ms = Date.now() - new Date(changedAt).getTime()
+    const minutes = Math.floor(ms / 60000)
+    if (minutes < 60) return `${minutes}m`
+    const hours = Math.floor(minutes / 60)
+    if (hours < 24) return `${hours}h`
+    const days = Math.floor(hours / 24)
+    if (days < 7) return `${days}d`
+    return `${Math.floor(days / 7)}w`
+  }
+
   function formatDueDate(dueDate: string): string {
     const date = new Date(dueDate)
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -28,9 +39,12 @@
   }
 
   let isOverdue = $derived(
-    task.dueDate != null &&
-    task.status !== 'done' &&
-    new Date(task.dueDate) < new Date()
+    task.status !== 'done' && (
+      // Primary: deadline (hard cutoff) is past
+      (task.deadline != null && new Date(task.deadline) < new Date()) ||
+      // Fallback: no deadline set, but dueDate (soft target) is past
+      (task.deadline == null && task.dueDate != null && new Date(task.dueDate) < new Date())
+    )
   )
 
   function handleKeydown(e: KeyboardEvent) {
@@ -49,9 +63,12 @@
   onkeydown={handleKeydown}
 >
   <div class="card-left">
-    <div class="priority-circle" style:--p-color={priorityColor(task.priority ?? 'p3')}>
-      <Circle size={18} strokeWidth={2} />
-    </div>
+    <span
+      class="priority-badge"
+      style:--p-color={priorityColor(task.priority ?? 'p3')}
+    >
+      {(task.priority ?? 'P3').toUpperCase()}
+    </span>
   </div>
   
   <div class="card-content">
@@ -74,9 +91,10 @@
         </div>
       {/if}
 
-      {#if task.statusChangedAt}
-        <div class="meta-item">
+      {#if task.statusChangedAt && task.status !== 'done'}
+        <div class="meta-item dwell-time">
           <Clock size={12} />
+          <span>{formatDwellTime(task.statusChangedAt)}</span>
         </div>
       {/if}
     </div>
@@ -105,16 +123,16 @@
     background-color: var(--bg-surface-hover);
   }
 
-  .card-left {
-    padding-top: 2px;
-  }
-
-  .priority-circle {
+  .priority-badge {
+    font-size: 0.6875rem;
+    font-weight: 700;
     color: var(--p-color);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    opacity: 0.8;
+    padding: 2px 5px;
+    border-radius: 3px;
+    background-color: color-mix(in srgb, var(--p-color) 15%, transparent);
+    border: 1px solid color-mix(in srgb, var(--p-color) 30%, transparent);
+    line-height: 1;
+    letter-spacing: 0.02em;
   }
 
   .card-content {
@@ -152,6 +170,14 @@
     height: 6px;
     background-color: var(--td-text-muted);
     border-radius: 50%;
+  }
+
+  .dwell-time {
+    gap: 0.25rem;
+  }
+
+  .dwell-time span {
+    font-variant-numeric: tabular-nums;
   }
 
   .meta-item {

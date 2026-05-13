@@ -2,6 +2,7 @@ import { db } from '../../db/connection'
 import { workspaces, workspaceMembers, users } from '../../db/schema'
 import { eq, and, count, sql } from 'drizzle-orm'
 import { createAuditLog } from '../../shared/audit/audit.service'
+import { TRPCError } from '@trpc/server'
 
 async function listUserWorkspaces(userId: string) {
   const rows = await db
@@ -45,7 +46,7 @@ async function getWorkspace(id: string, userId: string) {
     )
     .limit(1)
 
-  if (!member) throw new Error('Workspace not found or access denied')
+  if (!member) throw new TRPCError({ code: 'NOT_FOUND', message: 'Workspace not found or access denied' })
   return member.workspace
 }
 
