@@ -26,6 +26,7 @@
   let projects = $state<ProjectSummary[]>([])
   let isCreating = $state(false)
   let isFocused = $state(false)
+  let isLoadingProjects = $state(true)
 
   $effect(() => {
     if (autoFocus && inputEl) {
@@ -38,11 +39,14 @@
 
   $effect(() => {
     const wsIds = $activeFilterIds
-    async function load() {
-      if (wsIds.length === 0) {
-        projects = []
-        return
-      }
+    isLoadingProjects = true
+    if (wsIds.length === 0) {
+      projects = []
+      isLoadingProjects = false
+      return
+    }
+    
+    ;(async () => {
       try {
         const result = await trpc.project.list.query({ workspaceId: wsIds[0] })
         projects = result as ProjectSummary[]
@@ -51,9 +55,10 @@
         }
       } catch {
         projects = []
+      } finally {
+        isLoadingProjects = false
       }
-    }
-    load()
+    })()
   })
 
   function formatPreviewDate(date: Date | undefined): string {
@@ -125,7 +130,7 @@
   }
 </script>
 
-<div class={clsx('quick-add-v2', isFocused && 'focused', isCreating && 'loading')}>
+<div class={clsx('quick-add-v2', isFocused && 'focused', (isCreating || isLoadingProjects) && 'loading')}>
   <div class="input-row">
     <div class="input-wrapper">
       <input
@@ -136,7 +141,7 @@
         onkeydown={handleKeydown}
         onfocus={() => isFocused = true}
         onblur={() => isFocused = false}
-        disabled={isCreating}
+disabled={isCreating || isLoadingProjects}
       />
     </div>
     
