@@ -1,11 +1,13 @@
 <script lang="ts">
   import { trpc } from '$lib/trpc'
+  import { goto } from '$app/navigation'
 
   interface Props {
     sprintId: string
+    workspaceId?: string
   }
 
-  let { sprintId }: Props = $props()
+  let { sprintId, workspaceId = '' }: Props = $props()
 
   interface MemberCapacityRow {
     userId: string
@@ -92,7 +94,11 @@
         {#each members as m (m.userId)}
           <tr class:overloaded={m.isOverloaded}>
             <td class="col-name">
-              <span class="member-name">{m.user.name}</span>
+              {#if workspaceId}
+                <a href="/workspace/{workspaceId}/member/{m.userId}" class="member-link">{m.user.name}</a>
+              {:else}
+                <span class="member-name">{m.user.name}</span>
+              {/if}
             </td>
             <td class="col-num">{m.taskCount}</td>
             <td class="col-num">{m.estimatedHours}h</td>
@@ -195,6 +201,17 @@
 
   .col-name {
     font-weight: 500;
+  }
+
+  .member-link {
+    color: var(--text-main);
+    text-decoration: none;
+    font-weight: 500;
+  }
+
+  .member-link:hover {
+    color: var(--brand-primary);
+    text-decoration: underline;
   }
 
   .col-input {

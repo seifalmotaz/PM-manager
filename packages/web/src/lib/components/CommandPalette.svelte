@@ -9,14 +9,24 @@
     Clock, 
     User,
     Command,
-    ArrowRight
+    ArrowRight,
+    Circle,
+    Play,
+    Eye,
+    CheckCircle,
+    Home,
+    Inbox
   } from 'lucide-svelte'
   import { clsx } from 'clsx'
   import { goto } from '$app/navigation'
-  import { tasks } from '$lib/stores/tasks'
-  import { workspaces } from '$lib/stores/workspaces'
+  import { selectedTask } from '$lib/stores/tasks'
+  import { activeFilterIds } from '$lib/stores/workspaces'
+  import { get } from 'svelte/store'
+  import { trpc } from '$lib/trpc'
   // @ts-ignore
   import commandScore from 'command-score'
+  // @ts-ignore
+  import { parseTaskInput } from 'shared/nlp-parser'
 
   let {
     isOpen = $bindable(false),
@@ -25,56 +35,166 @@
     isOpen?: boolean
     onNewTask?: () => void
   } = $props()
+
   let query = $state('')
   let selectedIndex = $state(0)
   let inputEl = $state<HTMLInputElement>()
+  let searchResults = $state<{
+    tasks: Array<{ id: string; title: string; status: string; priority: string | null; project?: { name: string } }>
+  }>({ tasks: [] })
+  let loading = $state(false)
+  let debounceTimer: ReturnType<typeof setTimeout> | null = $state(null)
 
-  const staticCommands = [
-    { id: 'go-home', title: 'Go to Home', icon: Search, type: 'command', action: () => goto('/home') },
-    { id: 'go-velocity', title: 'Go to Velocity', icon: BarChart2, type: 'command', action: () => goto('/velocity') },
-    { id: 'go-projects', title: 'Go to Projects', icon: Layers, type: 'command', action: () => goto('/projects') },
-    { id: 'new-task', title: 'Create New Task', icon: Plus, type: 'command', action: () => { onNewTask?.() } },
-    { id: 'start-timer', title: 'Start Timer', icon: Clock, type: 'command', action: () => {/* Logic for timer */} },
+  const statusIcons: Record<string, typeof Circle> = {
+    todo: Circle,
+    in_progress: Play,
+    review: Eye,
+    done: CheckCircle,
+  }
+
+  const priorityColors: Record<string, string> = {
+    p0: '#ef4444',
+    p1: '#f59e0b',
+    p2: '#eab308',
+    p3: '#9ca3af',
+  }
+
+  const navigationItems = [
+    { id: 'nav-home', title: '/home', label: 'Go to Home', icon: Home, action: () => goto('/home') },
+    { id: 'nav-velocity', title: '/velocity', label: 'Go to Velocity', icon: BarChart2, action: () => goto('/velocity') },
+    { id: 'nav-projects', title: '/projects', label: 'Go to Projects', icon: Layers, action: () => goto('/projects') },
   ]
 
-  let results = $derived.by(() => {
-    if (!query) return staticCommands.map(c => ({ ...c, score: 1 }))
+  let flatResults = $derived.by(() => {
+    const items: Array<{
+      id: string
+      title: string
+      type: string
+      icon: typeof Circle
+      action: () => void
+      subtitle?: string
+      priorityColor?: string
+    }> = []
 
-    const dynamicResults = [
-      ...staticCommands,
-      ...$tasks.map(t => ({ id: `task-${t.id}`, title: t.title, type: 'task', icon: FileText, action: () => goto(`/home`) })), // Simplified
-      ...$workspaces.map(w => ({ id: `ws-${w.id}`, title: w.name, type: 'workspace', icon: Layers, action: () => {/* Switch WS */} }))
-    ]
+    // Navigation items
+    const navFiltered = navigationItems.filter(n => 
+      n.title.toLowerCase().includes(query.toLowerCase()) ||
+      n.label.toLowerCase().includes(query.toLowerCase())
+    )
+    for (const nav of navFiltered) {
+      items.push({
+        id: nav.id,
+        title: nav.title,
+        type: 'navigation',
+        icon: nav.icon,
+        action: nav.action,
+        subtitle: nav.label,
+      })
+    }
 
-    return dynamicResults
-      .map(item => ({
-        ...item,
-        score: commandScore(item.title, query)
-      }))
-      .filter(item => item.score > 0)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 10)
+    // Task results
+    for (const task of searchResults.tasks) {
+      items.push({
+        id: `task-${task.id}`,
+        title: task.title,
+        type: 'task',
+        icon: statusIcons[task.status] ?? Circle,
+        action: () => {
+          selectedTask.set(task as any)
+          isOpen = false
+        },
+        subtitle: task.project?.name,
+        priorityColor: task.priority ? priorityColors[task.priority] : undefined,
+      })
+    }
+
+    // Quick create mode
+    if (query.startsWith('>')) {
+      const parsed = parseTaskInput(query.slice(1).trim())
+      items.push({
+        id: 'quick-create',
+        title: parsed.title || 'New Task',
+        type: 'quick-create',
+        icon: Plus,
+        action: () => {
+          // TODO: Implement quick create
+          console.log('Quick create:', parsed)
+          isOpen = false
+        },
+        subtitle: [
+          parsed.priority ? parsed.priority.toUpperCase() : null,
+          parsed.storyPoints ? `SP ${parsed.storyPoints}` : null,
+          parsed.assigneeUsername ? `@${parsed.assigneeUsername}` : null,
+        ].filter(Boolean).join(' · ') || 'Create new task',
+      })
+    }
+
+    return items
   })
 
   $effect(() => {
     if (isOpen) {
       setTimeout(() => inputEl?.focus(), 10)
       selectedIndex = 0
+      query = ''
+      searchResults = { tasks: [] }
     }
   })
+
+  async function fetchResults(q: string) {
+    if (!q.trim()) {
+      searchResults = { tasks: [] }
+      loading = false
+      return
+    }
+
+    // Quick create mode
+    if (q.startsWith('>')) {
+      loading = false
+      return
+    }
+
+    // Navigation commands
+    if (q.startsWith('/')) {
+      loading = false
+      return
+    }
+
+    loading = true
+    try {
+      const data = await trpc.task.search.query({ 
+        query: q, 
+        workspaceIds: get(activeFilterIds) 
+      })
+      searchResults = data as typeof searchResults
+    } catch (err) {
+      console.error('Search failed:', err)
+      searchResults = { tasks: [] }
+    } finally {
+      loading = false
+    }
+  }
+
+  function handleInput(e: Event) {
+    const value = (e.target as HTMLInputElement).value
+    query = value
+
+    if (debounceTimer) clearTimeout(debounceTimer)
+    debounceTimer = setTimeout(() => fetchResults(value), 150)
+  }
 
   function handleKeydown(e: KeyboardEvent) {
     if (e.key === 'Escape') {
       isOpen = false
     } else if (e.key === 'ArrowDown') {
       e.preventDefault()
-      selectedIndex = (selectedIndex + 1) % results.length
+      selectedIndex = (selectedIndex + 1) % Math.max(flatResults.length, 1)
     } else if (e.key === 'ArrowUp') {
       e.preventDefault()
-      selectedIndex = (selectedIndex - 1 + results.length) % results.length
+      selectedIndex = (selectedIndex - 1 + Math.max(flatResults.length, 1)) % Math.max(flatResults.length, 1)
     } else if (e.key === 'Enter') {
       e.preventDefault()
-      const selected = results[selectedIndex]
+      const selected = flatResults[selectedIndex]
       if (selected) {
         selected.action()
         isOpen = false
@@ -103,39 +223,52 @@
         <Search size={20} class="search-icon" />
         <input
           bind:this={inputEl}
-          bind:value={query}
+          value={query}
+          oninput={handleInput}
           onkeydown={handleKeydown}
           placeholder="Search for tasks, projects, or commands..."
           type="text"
         />
+        {#if loading}
+          <div class="loading-spinner"></div>
+        {/if}
         <div class="esc-hint">ESC</div>
       </div>
 
       <div class="results-list">
-        {#each results as result, i (result.id)}
-          <button 
-            class={clsx('result-item', i === selectedIndex && 'selected')}
-            onclick={() => { result.action(); isOpen = false; }}
-            onmouseenter={() => selectedIndex = i}
-          >
-            <div class="result-icon">
-              <result.icon size={18} />
-            </div>
-            <div class="result-info">
-              <span class="result-title">{result.title}</span>
-              {#if result.type}
-                <span class="result-type">{result.type}</span>
+        {#if flatResults.length > 0}
+          {#each flatResults as result, i (result.id)}
+            <button 
+              class={clsx('result-item', i === selectedIndex && 'selected')}
+              onclick={() => { result.action(); isOpen = false; }}
+              onmouseenter={() => selectedIndex = i}
+            >
+              <div class="result-icon">
+                <result.icon size={18} />
+              </div>
+              <div class="result-info">
+                <span class="result-title">{result.title}</span>
+                {#if result.subtitle}
+                  <span class="result-subtitle">{result.subtitle}</span>
+                {/if}
+              </div>
+              {#if result.priorityColor}
+                <span class="priority-dot" style="background-color: {result.priorityColor}"></span>
               {/if}
-            </div>
-            {#if i === selectedIndex}
-              <ArrowRight size={14} class="enter-icon" />
-            {/if}
-          </button>
-        {:else}
+              {#if i === selectedIndex}
+                <ArrowRight size={14} class="enter-icon" />
+              {/if}
+            </button>
+          {/each}
+        {:else if query && !loading}
           <div class="no-results">
             <p>No results found for "{query}"</p>
           </div>
-        {/each}
+        {:else}
+          <div class="no-results">
+            <p>Start typing to search, or use "/" for navigation, ">" to create a task</p>
+          </div>
+        {/if}
       </div>
 
       <div class="palette-footer">
@@ -214,6 +347,19 @@
     color: var(--text-muted);
   }
 
+  .loading-spinner {
+    width: 16px;
+    height: 16px;
+    border: 2px solid var(--border-main);
+    border-top-color: var(--brand-primary);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
   .esc-hint {
     font-size: 0.6875rem;
     background-color: var(--zinc-800);
@@ -241,8 +387,8 @@
   }
 
   .result-item.selected {
-    background-color: var(--zinc-800);
-    box-shadow: inset 0 0 0 1px var(--zinc-700);
+    background-color: var(--td-hover);
+    box-shadow: inset 0 0 0 1px var(--border-main);
   }
 
   .result-icon {
@@ -254,6 +400,7 @@
     background-color: var(--zinc-900);
     border-radius: 6px;
     color: var(--text-muted);
+    flex-shrink: 0;
   }
 
   .result-item.selected .result-icon {
@@ -265,25 +412,35 @@
     flex: 1;
     display: flex;
     flex-direction: column;
+    min-width: 0;
   }
 
   .result-title {
     font-size: 0.875rem;
     font-weight: 500;
     color: var(--text-main);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
-  .result-type {
+  .result-subtitle {
     font-size: 0.6875rem;
-    text-transform: uppercase;
-    letter-spacing: 0.025em;
     color: var(--text-muted);
-    font-weight: 600;
+    margin-top: 2px;
+  }
+
+  .priority-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
   }
 
   .enter-icon {
     color: var(--brand-primary);
     opacity: 0.7;
+    flex-shrink: 0;
   }
 
   .no-results {

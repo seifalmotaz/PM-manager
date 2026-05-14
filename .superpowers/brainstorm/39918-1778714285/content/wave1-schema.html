@@ -1,0 +1,45 @@
+<h2>Wave 1: New Database Tables</h2>
+<p class="subtitle">3 new tables — all additive, no schema changes to existing tables</p>
+
+<div class="mockup">
+  <div class="mockup-header">comments</div>
+  <div class="mockup-body" style="font-family:monospace;font-size:13px;line-height:1.8;">
+    <div><b>id</b> <span style="color:#888">uuid PK</span></div>
+    <div><b>entityType</b> <span style="color:#888">text NOT NULL</span> <span style="color:#666">// 'task' | 'sprint' | 'project'</span></div>
+    <div><b>entityId</b> <span style="color:#888">uuid NOT NULL</span></div>
+    <div><b>content</b> <span style="color:#888">text NOT NULL</span></div>
+    <div><b>authorId</b> <span style="color:#888">uuid FK → users</span></div>
+    <div><b>createdAt</b> <span style="color:#888">timestamp</span></div>
+    <div><b>updatedAt</b> <span style="color:#888">timestamp</span></div>
+    <div style="margin-top:8px;color:#666;font-size:11px;">Index: (entityType, entityId) for filtered lookups</div>
+  </div>
+</div>
+
+<div class="mockup" style="margin-top:16px;">
+  <div class="mockup-header">checklist_items</div>
+  <div class="mockup-body" style="font-family:monospace;font-size:13px;line-height:1.8;">
+    <div><b>id</b> <span style="color:#888">uuid PK</span></div>
+    <div><b>taskId</b> <span style="color:#888">uuid FK → tasks ON DELETE CASCADE</span></div>
+    <div><b>content</b> <span style="color:#888">text NOT NULL</span></div>
+    <div><b>isCompleted</b> <span style="color:#888">boolean DEFAULT false</span></div>
+    <div><b>sortOrder</b> <span style="color:#888">integer DEFAULT 0</span></div>
+    <div><b>createdAt</b> <span style="color:#888">timestamp</span></div>
+    <div style="margin-top:8px;color:#666;font-size:11px;">Index: (taskId, sortOrder) for ordered display</div>
+  </div>
+</div>
+
+<div class="mockup" style="margin-top:16px;">
+  <div class="mockup-header">time_entries</div>
+  <div class="mockup-body" style="font-family:monospace;font-size:13px;line-height:1.8;">
+    <div><b>id</b> <span style="color:#888">uuid PK</span></div>
+    <div><b>taskId</b> <span style="color:#888">uuid FK → tasks ON DELETE CASCADE</span></div>
+    <div><b>userId</b> <span style="color:#888">uuid FK → users</span></div>
+    <div><b>startTime</b> <span style="color:#888">timestamp NOT NULL</span></div>
+    <div><b>endTime</b> <span style="color:#888">timestamp</span> <span style="color:#666">// null = still running</span></div>
+    <div><b>durationMinutes</b> <span style="color:#888">decimal</span> <span style="color:#666">// computed on stop</span></div>
+    <div><b>note</b> <span style="color:#888">text</span></div>
+    <div><b>isManual</b> <span style="color:#888">boolean DEFAULT false</span> <span style="color:#666">// true = manually logged</span></div>
+    <div><b>createdAt</b> <span style="color:#888">timestamp</span></div>
+    <div style="margin-top:8px;color:#666;font-size:11px;">Index: (taskId), (userId) — only one running entry per user (enforced in app)</div>
+  </div>
+</div>

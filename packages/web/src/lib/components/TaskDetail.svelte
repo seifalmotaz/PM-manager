@@ -4,6 +4,10 @@
   import { trpc } from '$lib/trpc'
   import { X, Tag, Calendar, User, Clock, Trash2, CheckCircle2, Hash, AlertTriangle, Layers } from 'lucide-svelte'
   import { clsx } from 'clsx'
+  import CommentList from './CommentList.svelte'
+  import CommentInput from './CommentInput.svelte'
+  import ChecklistBlock from './ChecklistBlock.svelte'
+  import ActivityTimeline from './ActivityTimeline.svelte'
 
   let { task, onRefresh }: { task: TaskSummary; onRefresh?: () => void } = $props()
 
@@ -24,6 +28,7 @@
   let openPopover = $state<string | null>(null)
   let members = $state<Array<{ userId: string; user: { id: string; name: string; email: string; avatarUrl?: string | null } }>>([])
   let isLoadingMembers = $state(false)
+  let commentKey = $state(0)
 
   $effect(() => {
     async function loadMembers() {
@@ -117,6 +122,10 @@
     const newStatus = task.status === 'done' ? 'todo' : 'done'
     await trpc.task.changeStatus.mutate({ id: task.id, status: newStatus as any })
     onRefresh?.()
+  }
+
+  function handleCommentCreated() {
+    commentKey++
   }
 </script>
 
@@ -290,6 +299,22 @@
         placeholder="Add a more detailed description..."
       ></textarea>
     </div>
+
+    <hr class="section-divider" />
+
+    <ChecklistBlock taskId={task.id} />
+
+    <hr class="section-divider" />
+
+    <ActivityTimeline taskId={task.id} />
+
+    <hr class="section-divider" />
+
+    {#key commentKey}
+      <CommentList entityType="task" entityId={task.id} />
+    {/key}
+
+    <CommentInput entityType="task" entityId={task.id} onCreated={handleCommentCreated} />
   </div>
 
   <footer class="detail-footer">
@@ -525,5 +550,11 @@
     display: flex;
     align-items: center;
     gap: 0.375rem;
+  }
+
+  .section-divider {
+    border: none;
+    border-top: 1px solid var(--border-main);
+    margin: 1rem 0;
   }
 </style>

@@ -3,7 +3,7 @@ import { db } from '../../db/connection'
 import { auditLogs } from '../../db/schema'
 
 const AuditEntrySchema = z.object({
-  entityType: z.enum(['task', 'project', 'sprint', 'workspace']),
+  entityType: z.enum(['task', 'project', 'sprint', 'workspace', 'comment']),
   entityId: z.string().uuid(),
   action: z.enum(['created', 'updated', 'deleted', 'status_changed']),
   field: z.string().optional(),

@@ -1,10 +1,11 @@
 import { db } from '../../db/connection'
-import { tasks, projects } from '../../db/schema'
-import { eq, and, lt, ne, asc, inArray, count } from 'drizzle-orm'
+import { tasks, projects, workspaceMembers, sprints } from '../../db/schema'
+import { eq, and, lt, ne, asc, inArray, count, or, ilike } from 'drizzle-orm'
 import { createAuditLog, auditFieldChange } from '../../shared/audit/audit.service'
 import { projectService } from '../project/project.service'
 import { workspaceService } from '../workspace/workspace.service'
 import { sprintService } from '../sprint/sprint.service'
+import { notificationService } from '../notification/notification.service'
 import { TRPCError } from '@trpc/server'
 import { parseTaskInput } from './nlp-parser'
 import type { ParsedTaskInput } from './nlp-parser'
@@ -159,6 +160,11 @@ async function createTask(input: CreateTaskInput, userId: string) {
     userId,
   })
 
+  // Notify assignee (but not yourself)
+  if (input.assigneeId && input.assigneeId !== userId) {
+    notificationService.notifyAssigned(task.id, task.title, input.assigneeId)
+  }
+
   return task
 }
 
@@ -230,6 +236,16 @@ async function updateTask(
       // auditFieldChange is fire-and-forget
       auditFieldChange('task', id, userId, key, currentValue, normalizedValue)
     }
+  }
+
+  // Notify on assignee change (but not self-assignment)
+  const newAssigneeId = updates.assigneeId as string | undefined
+  if (
+    newAssigneeId !== undefined &&
+    newAssigneeId !== task.assigneeId &&
+    newAssigneeId !== userId
+  ) {
+    notificationService.notifyAssigned(id, task.title, newAssigneeId)
   }
 
   if (Object.keys(updateData).length > 0) {
@@ -385,6 +401,90 @@ async function listHome(workspaceIds: string[], userId: string) {
   }))
 }
 
+export interface TaskSearchResult {
+  tasks: Array<{ id: string; title: string; status: string; priority: string | null; projectId: string; projectName?: string }>
+  projects: Array<{ id: string; name: string; workspaceId: string }>
+  sprints: Array<{ id: string; name: string; projectId: string }>
+}
+
+async function searchTasks(query: string, workspaceIds: string[] | undefined, userId: string): Promise<TaskSearchResult> {
+  // Resolve visible workspace IDs
+  let visibleWorkspaceIds: string[]
+  if (workspaceIds && workspaceIds.length > 0) {
+    visibleWorkspaceIds = workspaceIds
+  } else {
+    const memberships = await db
+      .select({ workspaceId: workspaceMembers.workspaceId })
+      .from(workspaceMembers)
+      .where(eq(workspaceMembers.userId, userId))
+    visibleWorkspaceIds = memberships.map((m) => m.workspaceId)
+  }
+
+  if (visibleWorkspaceIds.length === 0) {
+    return { tasks: [], projects: [], sprints: [] }
+  }
+
+  // Get all project IDs in visible workspaces
+  const visibleProjects = await db
+    .select({ id: projects.id, name: projects.name, workspaceId: projects.workspaceId })
+    .from(projects)
+    .where(inArray(projects.workspaceId, visibleWorkspaceIds))
+
+  const projectIds = visibleProjects.map((p) => p.id)
+  const projectMap = new Map(visibleProjects.map((p) => [p.id, p.name]))
+
+  if (projectIds.length === 0) {
+    return { tasks: [], projects: [], sprints: [] }
+  }
+
+  // Search tasks by title using ILIKE
+  const taskResults = await db
+    .select({
+      id: tasks.id,
+      title: tasks.title,
+      status: tasks.status,
+      priority: tasks.priority,
+      projectId: tasks.projectId,
+    })
+    .from(tasks)
+    .where(
+      and(
+        inArray(tasks.projectId, projectIds),
+        or(
+          ilike(tasks.title, `%${query}%`),
+          ilike(tasks.description, `%${query}%`),
+        ),
+      ),
+    )
+    .limit(10)
+
+  // Enrich task results with project name
+  const enrichedTasks = taskResults.map((t) => ({
+    ...t,
+    projectName: projectMap.get(t.projectId) ?? undefined,
+  }))
+
+  // Search projects by name
+  const projectResults = await db
+    .select({ id: projects.id, name: projects.name, workspaceId: projects.workspaceId })
+    .from(projects)
+    .where(and(inArray(projects.id, projectIds), ilike(projects.name, `%${query}%`)))
+    .limit(5)
+
+  // Search sprints by name
+  const sprintResults = await db
+    .select({ id: sprints.id, name: sprints.name, projectId: sprints.projectId })
+    .from(sprints)
+    .where(and(inArray(sprints.projectId, projectIds), ilike(sprints.name, `%${query}%`)))
+    .limit(5)
+
+  return {
+    tasks: enrichedTasks,
+    projects: projectResults,
+    sprints: sprintResults,
+  }
+}
+
 export const taskService = {
   parseTaskInput,
   listTasks,
@@ -395,4 +495,5 @@ export const taskService = {
   deleteTask,
   getOverdueCount,
   listHome,
+  searchTasks,
 }

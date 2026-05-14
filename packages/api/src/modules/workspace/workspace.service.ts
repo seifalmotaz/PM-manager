@@ -106,9 +106,46 @@ async function createCompanyWorkspace(name: string, userId: string) {
   return workspace
 }
 
+async function removeMember(workspaceId: string, memberUserId: string, actorUserId: string) {
+  // Verify the actor is a member of this workspace
+  // Use the existing getWorkspace pattern — it verifies membership
+  await getWorkspace(workspaceId, actorUserId)
+
+  // Find the member to remove
+  const [member] = await db
+    .select()
+    .from(workspaceMembers)
+    .where(and(
+      eq(workspaceMembers.workspaceId, workspaceId),
+      eq(workspaceMembers.userId, memberUserId),
+    ))
+    .limit(1)
+
+  if (!member) throw new TRPCError({ code: 'NOT_FOUND', message: 'Member not found in this workspace' })
+
+  // Delete the membership
+  await db
+    .delete(workspaceMembers)
+    .where(and(
+      eq(workspaceMembers.workspaceId, workspaceId),
+      eq(workspaceMembers.userId, memberUserId),
+    ))
+
+  await createAuditLog({
+    entityType: 'workspace',
+    entityId: workspaceId,
+    action: 'updated',
+    field: 'member_removed',
+    oldValue: memberUserId,
+    newValue: undefined,
+    userId: actorUserId,
+  })
+}
+
 export const workspaceService = {
   listUserWorkspaces,
   getWorkspace,
   listMembers,
   createCompanyWorkspace,
+  removeMember,
 }

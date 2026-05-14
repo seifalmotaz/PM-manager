@@ -3,15 +3,20 @@
   import { trpc } from '$lib/trpc'
   import SprintBoard from '$lib/components/SprintBoard.svelte'
   import CapacityTable from '$lib/components/CapacityTable.svelte'
+  import ForecastView from '$lib/components/ForecastView.svelte'
   import { clsx } from 'clsx'
   import type { Sprint } from 'api/modules/sprint/sprint.type'
   import type { TaskSummary } from '$lib/stores/tasks'
+
+  let { data } = $props()
 
   let projectId = $derived($page.params.id)
   let sprints = $state<Sprint[]>([])
   let tasks = $state<TaskSummary[]>([])
   let activeSubTab = $state<'board' | 'capacity'>('board')
   let selectedSprintId = $state('')
+
+  const workspaceId = data.workspaceId
 
   $effect(() => {
     async function load() {
@@ -81,12 +86,14 @@
 {:else}
   {#if selectedSprintId}
     <div class="capacity-tab-content">
-      <CapacityTable sprintId={selectedSprintId} />
+      <CapacityTable sprintId={selectedSprintId} {workspaceId} />
     </div>
   {:else}
     <p class="empty-msg">Select a sprint to view capacity.</p>
   {/if}
 {/if}
+
+<ForecastView projectId={projectId} />
 
 <style>
   .sprint-selector-bar {

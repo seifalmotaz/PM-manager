@@ -3,13 +3,11 @@
   import { getAuth, isAuthenticated, fetchSession } from '$lib/stores/auth.svelte'
   import { fetchWorkspaces, activeFilterIds } from '$lib/stores/workspaces'
   import { fetchOverdueCount, selectedTask, fetchTasks } from '$lib/stores/tasks'
-  import { 
-    Home, 
-    BarChart2, 
-    Layers, 
-    Search, 
-    Bell, 
-    Clock, 
+  import {
+    Home,
+    BarChart2,
+    Layers,
+    Search,
     Settings,
     ChevronLeft,
     ChevronRight,
@@ -17,10 +15,12 @@
   } from 'lucide-svelte'
   import { clsx } from 'clsx'
   import CommandPalette from '$lib/components/CommandPalette.svelte'
+  import TimeTracker from '$lib/components/TimeTracker.svelte'
   import QuickAddModal from '$lib/components/QuickAddModal.svelte'
   import WorkspaceFilter from '$lib/components/WorkspaceFilter.svelte'
   import DeadlineBadge from '$lib/components/DeadlineBadge.svelte'
   import TaskDetail from '$lib/components/TaskDetail.svelte'
+  import NotificationBell from '$lib/components/NotificationBell.svelte'
 
   let { children } = $props()
   let isSidebarCollapsed = $state(true)
@@ -126,12 +126,8 @@
 
     <div class="topbar-right">
       <DeadlineBadge />
-      <button class="topbar-action" title="Start Timer">
-        <Clock size={20} />
-      </button>
-      <button class="topbar-action" title="Notifications">
-        <Bell size={20} />
-      </button>
+      <TimeTracker />
+      <NotificationBell />
       <button class="quick-add-btn" onclick={() => isQuickAddOpen = true}>
         <Plus size={20} />
         <span>New Task</span>

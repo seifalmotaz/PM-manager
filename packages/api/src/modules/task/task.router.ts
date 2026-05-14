@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { router, protectedProcedure } from '../../trpc'
+import { router, protectedProcedure, adminProcedure } from '../../trpc'
 import { taskService } from './task.service'
 import { parseTaskInput } from './nlp-parser'
 
@@ -69,7 +69,7 @@ export const taskRouter = router({
       return taskService.updateTask(input.id, input, ctx.user.id)
     }),
 
-  delete: protectedProcedure
+  delete: adminProcedure
     .input(z.object({ id: z.string().uuid() }))
     .mutation(({ input, ctx }) => {
       return taskService.deleteTask(input.id, ctx.user.id)
@@ -99,4 +99,8 @@ export const taskRouter = router({
   overdueCount: protectedProcedure.query(({ ctx }) => {
     return taskService.getOverdueCount(ctx.user.id)
   }),
+
+  search: protectedProcedure
+    .input(z.object({ query: z.string().min(1), workspaceIds: z.array(z.string().uuid()).optional() }))
+    .query(({ input, ctx }) => taskService.searchTasks(input.query, input.workspaceIds, ctx.user.id)),
 })

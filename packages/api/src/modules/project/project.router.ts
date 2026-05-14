@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { router, protectedProcedure } from '../../trpc'
+import { router, protectedProcedure, adminProcedure } from '../../trpc'
 import { projectService } from './project.service'
 
 export const projectRouter = router({
@@ -45,7 +45,7 @@ export const projectRouter = router({
       return projectService.updateProject(input.id, input, ctx.user.id)
     }),
 
-  delete: protectedProcedure
+  delete: adminProcedure
     .input(z.object({ id: z.string().uuid() }))
     .mutation(({ input, ctx }) => {
       return projectService.deleteProject(input.id, ctx.user.id)

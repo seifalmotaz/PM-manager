@@ -1,4 +1,5 @@
-import { pgTable, uuid, text, timestamp, boolean, decimal, uniqueIndex, index } from 'drizzle-orm/pg-core'
+import { pgTable, uuid, text, timestamp, boolean, decimal, integer, uniqueIndex, index } from 'drizzle-orm/pg-core'
+import { sql } from 'drizzle-orm'
 
 export const users = pgTable('users', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -94,3 +95,56 @@ export const employeeCapacity = pgTable('employee_capacity', {
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 })
+
+export const comments = pgTable('comments', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  entityType: text('entity_type').notNull(),
+  entityId: uuid('entity_id').notNull(),
+  content: text('content').notNull(),
+  authorId: uuid('author_id').notNull().references(() => users.id),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+}, (table) => ({
+  entityIdx: index('idx_comments_entity').on(table.entityType, table.entityId, table.createdAt),
+  authorIdx: index('idx_comments_author').on(table.authorId),
+}))
+
+export const checklistItems = pgTable('checklist_items', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  taskId: uuid('task_id').notNull().references(() => tasks.id, { onDelete: 'cascade' }),
+  content: text('content').notNull(),
+  isCompleted: boolean('is_completed').notNull().default(false),
+  sortOrder: integer('sort_order').notNull().default(0),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (table) => ({
+  taskOrderIdx: index('idx_checklist_task_order').on(table.taskId, table.sortOrder),
+}))
+
+export const timeEntries = pgTable('time_entries', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  taskId: uuid('task_id').notNull().references(() => tasks.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id').notNull().references(() => users.id),
+  startTime: timestamp('start_time').notNull(),
+  endTime: timestamp('end_time'),
+  durationMinutes: decimal('duration_minutes'),
+  note: text('note'),
+  isManual: boolean('is_manual').notNull().default(false),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (table) => ({
+  taskIdx: index('idx_time_entries_task').on(table.taskId),
+  userIdx: index('idx_time_entries_user').on(table.userId),
+}))
+
+export const notifications = pgTable('notifications', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull().references(() => users.id),
+  type: text('type').notNull(),
+  title: text('title').notNull(),
+  body: text('body'),
+  entityType: text('entity_type'),
+  entityId: uuid('entity_id'),
+  isRead: boolean('is_read').notNull().default(false),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (table) => ({
+  userReadIdx: index('idx_notifications_user_read').on(table.userId, table.isRead, table.createdAt),
+}))

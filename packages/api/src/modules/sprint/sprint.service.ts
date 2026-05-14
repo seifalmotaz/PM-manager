@@ -1,10 +1,11 @@
 import { db } from '../../db/connection'
-import { sprints, tasks } from '../../db/schema'
+import { sprints, tasks, projects } from '../../db/schema'
 import { eq, and, isNull, sql, asc } from 'drizzle-orm'
 import { createAuditLog } from '../../shared/audit/audit.service'
 import { projectService } from '../project/project.service'
 import { TRPCError } from '@trpc/server'
 import type { Sprint } from './sprint.type'
+import { notificationService } from '../notification/notification.service'
 
 type SprintStatus = 'planned' | 'active' | 'completed'
 
@@ -80,7 +81,31 @@ async function refreshSprintStatus(sprint: SprintRow): Promise<SprintRow> {
     .returning()
 
   // If no row was updated (concurrent race), refetch
-  return (updated ?? (await getSprintById(sprint.id))!) as SprintRow
+  const result = (updated ?? (await getSprintById(sprint.id))!) as SprintRow
+
+  // Fire notification triggers on status transitions
+  if (computedStatus === 'active' && sprint.status !== 'active') {
+    const [proj] = await db
+      .select({ workspaceId: projects.workspaceId })
+      .from(projects)
+      .where(eq(projects.id, sprint.projectId))
+      .limit(1)
+    if (proj) {
+      notificationService.notifySprintStart(sprint.id, sprint.name, proj.workspaceId)
+    }
+  }
+  if (computedStatus === 'completed' && sprint.status !== 'completed') {
+    const [proj] = await db
+      .select({ workspaceId: projects.workspaceId })
+      .from(projects)
+      .where(eq(projects.id, sprint.projectId))
+      .limit(1)
+    if (proj) {
+      notificationService.notifySprintEnd(sprint.id, sprint.name, proj.workspaceId)
+    }
+  }
+
+  return result
 }
 
 /**

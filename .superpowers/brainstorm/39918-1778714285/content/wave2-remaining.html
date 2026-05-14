@@ -1,0 +1,78 @@
+<h2>Wave 2: Notifications + Employee Pages + Forecasting</h2>
+
+<div class="section">
+  <h3>notifications Table</h3>
+  <div class="mockup">
+    <div class="mockup-body" style="font-family:monospace;font-size:13px;line-height:1.8;">
+      <div><b>id</b> <span style="color:#888">uuid PK</span></div>
+      <div><b>userId</b> <span style="color:#888">uuid FK → users // who receives this</span></div>
+      <div><b>type</b> <span style="color:#888">text</span> <span style="color:#666">// 'assigned' | 'deadline_soon' | 'sprint_started' | 'sprint_ended' | 'mentioned'</span></div>
+      <div><b>title</b> <span style="color:#888">text NOT NULL</span> <span style="color:#666">// "Assigned to 'Fix login bug'"</span></div>
+      <div><b>body</b> <span style="color:#888">text</span></div>
+      <div><b>entityType</b> <span style="color:#888">text</span> <span style="color:#666">// task | sprint | project</span></div>
+      <div><b>entityId</b> <span style="color:#888">uuid</span> <span style="color:#666">// click → opens entity</span></div>
+      <div><b>isRead</b> <span style="color:#888">boolean DEFAULT false</span></div>
+      <div><b>createdAt</b> <span style="color:#888">timestamp</span></div>
+      <div style="margin-top:8px;color:#666;font-size:11px;">Index: (userId, isRead, createdAt) for unread-first queries</div>
+    </div>
+  </div>
+
+  <h4 style="margin-top:16px;">Notification Triggers</h4>
+  <table style="width:100%;border-collapse:collapse;font-size:12px;">
+    <tr style="border-bottom:1px solid #333;"><th style="text-align:left;padding:5px;">Event</th><th style="text-align:left;padding:5px;">Recipients</th><th style="text-align:left;padding:5px;">Fired when</th></tr>
+    <tr style="border-bottom:1px solid #222;"><td style="padding:5px;">Task assigned</td><td style="padding:5px;">Assignee</td><td style="padding:5px;">task.create or task.update with new assigneeId</td></tr>
+    <tr style="border-bottom:1px solid #222;"><td style="padding:5px;">Deadline approaching</td><td style="padding:5px;">Assignee</td><td style="padding:5px;">Scheduled check (cron or on page load) — 24h before deadline</td></tr>
+    <tr style="border-bottom:1px solid #222;"><td style="padding:5px;">Sprint started</td><td style="padding:5px;">All workspace members</td><td style="padding:5px;">Sprint status transitions to 'active'</td></tr>
+    <tr style="border-bottom:1px solid #222;"><td style="padding:5px;">Sprint ended</td><td style="padding:5px;">All workspace members</td><td style="padding:5px;">Sprint status transitions to 'completed'</td></tr>
+    <tr style="border-bottom:1px solid #222;"><td style="padding:5px;">Mentioned in comment</td><td style="padding:5px;">Mentioned user</td><td style="padding:5px;">comment.create with @username in content</td></tr>
+  </table>
+</div>
+
+<div class="section" style="margin-top:20px;">
+  <h3>Employee Detail Page</h3>
+  <div class="mockup">
+    <div class="mockup-header">Route: /workspace/[wid]/member/[uid]</div>
+    <div class="mockup-body" style="font-family:monospace;font-size:12px;line-height:1.6;">
+      <div style="color:#c084fc;">┌─────────────────────────────────────────┐</div>
+      <div style="color:#c084fc;">│</div> <span style="color:#fff;">Seif Al Motaz</span> <span style="color:#666;">— Admin</span>  <span style="color:#c084fc;">                    │</span>
+      <div style="color:#c084fc;">│</div> <span style="color:#888;">seif@example.com</span> <span style="color:#c084fc;">                         │</span>
+      <div style="color:#c084fc;">├─────────────────────────────────────────┤</div>
+      <div style="color:#c084fc;">│</div> <span style="color:#a78bfa;">Velocity</span> <span style="color:#888;">(Last 4 sprints)</span> <span style="color:#c084fc;">                │</span>
+      <div style="color:#c084fc;">│</div> <span style="color:#666;">  Sprint 1:</span> <span style="color:#22d3ee;">13 SP</span> <span style="color:#888;">completed</span> <span style="color:#c084fc;">            │</span>
+      <div style="color:#c084fc;">│</div> <span style="color:#666;">  Sprint 2:</span> <span style="color:#22d3ee;">8 SP</span>  <span style="color:#888;">completed</span> <span style="color:#c084fc;">            │</span>
+      <div style="color:#c084fc;">│</div> <span style="color:#666;">  Sprint 3:</span> <span style="color:#22d3ee;">21 SP</span> <span style="color:#888;">completed</span> <span style="color:#c084fc;">            │</span>
+      <div style="color:#c084fc;">│</div> <span style="color:#666;">  Sprint 4:</span> <span style="color:#f59e0b;">Active</span> <span style="color:#c084fc;">                     │</span>
+      <div style="color:#c084fc;">├─────────────────────────────────────────┤</div>
+      <div style="color:#c084fc;">│</div> <span style="color:#a78bfa;">Current Sprint</span> <span style="color:#c084fc;">                          │</span>
+      <div style="color:#c084fc;">│</div> <span style="color:#888;">  Tasks:</span> <span style="color:#22d3ee;">5</span> <span style="color:#c084fc;">                               │</span>
+      <div style="color:#c084fc;">│</div> <span style="color:#888;">  Est. Hours:</span> <span style="color:#22d3ee;">34h</span> <span style="color:#c084fc;">                         │</span>
+      <div style="color:#c084fc;">│</div> <span style="color:#888;">  Capacity:</span> <span style="color:#22d3ee;">40h</span> <span style="color:#22c55e;">— 85%</span> <span style="color:#c084fc;">                   │</span>
+      <div style="color:#c084fc;">├─────────────────────────────────────────┤</div>
+      <div style="color:#c084fc;">│</div> <span style="color:#a78bfa;">Assigned Tasks</span> <span style="color:#666;">(filterable by status)</span> <span style="color:#c084fc;">      │</span>
+      <div style="color:#c084fc;">│</div> <span style="color:#666;">  [P1] Fix login bug</span> <span style="color:#c084fc;">                    │</span>
+      <div style="color:#c084fc;">│</div> <span style="color:#666;">  [P2] Update docs</span> <span style="color:#c084fc;">                       │</span>
+      <div style="color:#c084fc;">│</div> <span style="color:#666;">  ...</span> <span style="color:#c084fc;">                                    │</span>
+      <div style="color:#c084fc;">└─────────────────────────────────────────┘</div>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top:20px;">
+  <h3>Backlog Forecasting</h3>
+  <p style="color:#888;">Pure computation — no new tables. Leverages existing velocity engine + task data.</p>
+
+  <div class="mockup" style="margin-top:12px;">
+    <div class="mockup-body" style="font-family:monospace;font-size:12px;line-height:1.6;">
+      <div style="color:#888;">// Algorithm: sort backlog tasks by priority,</div>
+      <div style="color:#888;">// fill future sprints by avg velocity until backlog is empty</div>
+      <div style="margin-top:6px;"></div>
+      <div style="color:#a78bfa;">Backlog:</div> <span style="color:#22d3ee;">42 SP</span> <span style="color:#666;">(14 tasks)</span>
+      <div style="color:#a78bfa;">Avg Velocity:</div> <span style="color:#22d3ee;">18 SP/sprint</span>
+      <div style="margin-top:6px;"></div>
+      <div><span style="color:#22c55e;">Sprint 5 (May 26–Jun 6):</span> <span style="color:#22d3ee;">18 SP</span> <span style="color:#666;">— 6 tasks</span></div>
+      <div><span style="color:#22c55e;">Sprint 6 (Jun 9–Jun 20):</span> <span style="color:#22d3ee;">18 SP</span> <span style="color:#666;">— 5 tasks</span></div>
+      <div><span style="color:#22c55e;">Sprint 7 (Jun 23–Jul 4):</span> <span style="color:#22d3ee;">6 SP</span> <span style="color:#666;">— 3 tasks</span></div>
+      <div style="margin-top:6px;color:#22d3ee;">Backlog cleared by Jul 4 (3 sprints)</div>
+    </div>
+  </div>
+</div>

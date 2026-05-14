@@ -8,6 +8,20 @@
       "when": 1778544496443,
       "tag": "0000_slimy_thing",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1778790865409,
+      "tag": "0001_bored_warstar",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1778792065926,
+      "tag": "0002_fat_toad",
+      "breakpoints": true
     }
   ]
 }

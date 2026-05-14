@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { router, protectedProcedure } from '../../trpc'
+import { router, protectedProcedure, adminProcedure } from '../../trpc'
 import { capacityService } from './capacity.service'
 
 const forSprint = protectedProcedure
@@ -8,7 +8,7 @@ const forSprint = protectedProcedure
     return capacityService.getCapacityTable(input.sprintId, ctx.user.id)
   })
 
-const set = protectedProcedure
+const set = adminProcedure
   .input(
     z.object({
       sprintId: z.string().uuid(),

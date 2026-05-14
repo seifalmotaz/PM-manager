@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { router, protectedProcedure } from '../../trpc'
+import { router, protectedProcedure, adminProcedure } from '../../trpc'
 import { workspaceService } from './workspace.service'
 
 export const workspaceRouter = router({
@@ -28,4 +28,8 @@ export const workspaceRouter = router({
     .query(({ input, ctx }) => {
       return workspaceService.listMembers(input.workspaceId, ctx.user.id)
     }),
+
+  removeMember: adminProcedure
+    .input(z.object({ workspaceId: z.string().uuid(), userId: z.string().uuid() }))
+    .mutation(({ input, ctx }) => workspaceService.removeMember(input.workspaceId, input.userId, ctx.user.id)),
 })

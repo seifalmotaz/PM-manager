@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { router, protectedProcedure } from '../../trpc'
+import { router, protectedProcedure, adminProcedure } from '../../trpc'
 import { sprintService } from './sprint.service'
 import { createSprintSchema, updateSprintSchema } from './sprint.schema'
 
@@ -23,7 +23,7 @@ export const sprintRouter = router({
       return sprintService.updateSprint(id, updates, ctx.user.id)
     }),
 
-  delete: protectedProcedure
+  delete: adminProcedure
     .input(z.object({ id: z.string().uuid(), deleteTasks: z.boolean() }))
     .mutation(({ input, ctx }) =>
       sprintService.deleteSprint(input.id, ctx.user.id, input.deleteTasks),

@@ -1,0 +1,8 @@
+{"type":"server-started","port":63278,"host":"127.0.0.1","url_host":"localhost","url":"http://localhost:63278","screen_dir":"/Volumes/MacExtend/Peronal/PM-manager/.superpowers/brainstorm/39918-1778714285/content","state_dir":"/Volumes/MacExtend/Peronal/PM-manager/.superpowers/brainstorm/39918-1778714285/state"}
+{"type":"screen-added","file":"/Volumes/MacExtend/Peronal/PM-manager/.superpowers/brainstorm/39918-1778714285/content/approach.html"}
+{"type":"screen-added","file":"/Volumes/MacExtend/Peronal/PM-manager/.superpowers/brainstorm/39918-1778714285/content/wave1-schema.html"}
+{"type":"screen-added","file":"/Volumes/MacExtend/Peronal/PM-manager/.superpowers/brainstorm/39918-1778714285/content/roles-design.html"}
+{"source":"user-event","type":"click","text":"A\n    \n      tRPC Middleware (Recommended)\n      Create an adminProcedure that extends protectedProcedure. Admin-only mutations (delete project, delete sprint, manage members, delete comment) use adminProcedure. The middleware queries workspace_members for the user's role and throws UNAUTHORIZED if they're not admin.\n      Pros: Clean separation. No service-level changes. Existing procedures just change which procedure factory they use. Easy to audit which endpoints are admin-only.\n      Cons: Adds a DB query per admin procedure call (can be cached). Slightly more boilerplate.","choice":"a","id":null,"timestamp":1778714967255}
+{"type":"screen-added","file":"/Volumes/MacExtend/Peronal/PM-manager/.superpowers/brainstorm/39918-1778714285/content/wave2-remaining.html"}
+{"type":"screen-added","file":"/Volumes/MacExtend/Peronal/PM-manager/.superpowers/brainstorm/39918-1778714285/content/waiting.html"}
+{"type":"server-stopped","reason":"idle timeout"}

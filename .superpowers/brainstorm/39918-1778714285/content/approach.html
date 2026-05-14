@@ -1,0 +1,26 @@
+<h2>How should we structure the v2 build?</h2>
+<p class="subtitle">9 features, 3 different approaches to organizing them</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Stacked Phases (3-4 sequential phases)</h3>
+      <p>Build features in dependency order: Infrastructure first (roles, notifications), then Task Depth (comments, checklists, activity), then Discovery (Cmd+K), then Time (timer, forecasting). Each phase builds on the last. No parallel work.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Independent Tracks (4 parallel streams)</h3>
+      <p>Each bucket is an independent track: People track, Task Depth track, Discovery track, Time track. They share almost no code. Build them in parallel or in any order. Only Risk: role middleware touches all routers, so People goes first or we build it last and do a final integration pass.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Value-First Waves (2 waves)</h3>
+      <p><strong>Wave 1:</strong> High-value, low-risk features that users feel immediately - Comments, Checklists, Cmd+K, Activity Feed, Timer. No architectural changes.<br/><strong>Wave 2:</strong> Infrastructure features - Roles (touches everything), Notifications (depends on roles for "who sees what"), Employee Pages, Forecasting. Ships less user-visible value but completes the platform.</p>
+    </div>
+  </div>
+</div>
