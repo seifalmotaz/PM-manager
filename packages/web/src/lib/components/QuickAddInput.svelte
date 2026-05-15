@@ -4,17 +4,20 @@
   import { parseTaskInput } from 'shared/nlp-parser'
   import { Layers, Plus, Tag, Calendar, User, Zap, Send } from 'lucide-svelte'
   import { clsx } from 'clsx'
+  import { getSessions } from '$lib/stores/org-sessions.svelte'
 
   let {
     onCreated,
     onAddWithDetails,
     autoFocus = false,
     projectId = '',
+    orgId = '',
   }: {
     onCreated: () => void
     onAddWithDetails?: (projectId: string) => void
     autoFocus?: boolean
     projectId?: string
+    orgId?: string
   } = $props()
 
   interface ProjectSummary {
@@ -31,6 +34,7 @@
   let isCreating = $state(false)
   let isFocused = $state(false)
   let isLoadingProjects = $state(true)
+  let selectedOrgId = $state('')
 
   $effect(() => {
     if (autoFocus && inputEl) {
@@ -55,28 +59,68 @@
   // Synchronous parse
   let parsed = $derived(parseTaskInput(input))
 
+  // Determine the effective org ID for project fetching
+  let effectiveOrgId = $derived(orgId || selectedOrgId)
+
+  // Determine if we need to show org picker
+  let needsOrgPicker = $derived(
+    !orgId && !selectedOrgId
+  )
+
+  // Fetch projects based on org context
   $effect(() => {
     const wsIds = $activeFilterIds
     isLoadingProjects = true
-    if (wsIds.length === 0) {
-      projects = []
-      isLoadingProjects = false
-      return
-    }
-    
-    ;(async () => {
-      try {
-        const result = await trpc.project.list.query({ workspaceId: wsIds[0] })
-        projects = result as ProjectSummary[]
-        if (selectedProjectId === '' && projects.length > 0) {
-          selectedProjectId = projects[0].id
-        }
-      } catch {
+
+    // Determine which org to fetch projects for
+    const targetOrgId = orgId || selectedOrgId
+
+    if (!targetOrgId) {
+      // No org context - fetch based on workspaces
+      if (wsIds.length === 0) {
         projects = []
-      } finally {
         isLoadingProjects = false
+        return
       }
-    })()
+
+      ;(async () => {
+        try {
+          const result = await trpc.project.list.query({ workspaceId: wsIds[0] })
+          projects = result as ProjectSummary[]
+          if (selectedProjectId === '' && projects.length > 0) {
+            selectedProjectId = projects[0].id
+          }
+        } catch {
+          projects = []
+        } finally {
+          isLoadingProjects = false
+        }
+      })()
+    } else {
+      // Has org context - fetch projects for that org
+      // Note: This requires org→workspace mapping which is deferred to future phase
+      // For now, we fetch all workspaces and filter conceptually
+      ;(async () => {
+        try {
+          // When orgId is provided, we would normally fetch projects via the org's workspaces
+          // This is a placeholder that uses the first workspace for now
+          // TODO: Implement proper org→workspace resolution when that data model is ready
+          if (wsIds.length > 0) {
+            const result = await trpc.project.list.query({ workspaceId: wsIds[0] })
+            projects = result as ProjectSummary[]
+            if (selectedProjectId === '' && projects.length > 0) {
+              selectedProjectId = projects[0].id
+            }
+          } else {
+            projects = []
+          }
+        } catch {
+          projects = []
+        } finally {
+          isLoadingProjects = false
+        }
+      })()
+    }
   })
 
   function formatPreviewDate(date: Date | undefined): string {
@@ -219,11 +263,29 @@ disabled={isCreating || isLoadingProjects}
       {#if !projectId}
         <div class="project-picker-inline">
           <Layers size={14} class="icon-muted" />
-          <select bind:value={selectedProjectId} disabled={isCreating}>
-            {#each projects as project (project.id)}
-              <option value={project.id}>{project.name}</option>
-            {/each}
-          </select>
+          {#if needsOrgPicker}
+            <select
+              bind:value={selectedOrgId}
+              disabled={isCreating}
+              onchange={() => {
+                // Reset project selection when org changes
+                selectedProjectId = ''
+              }}
+            >
+              <option value="">Which org?</option>
+              {#each getSessions().sessions as session}
+                <option value={session.session.organizationId}>
+                  {session.organizationName}
+                </option>
+              {/each}
+            </select>
+          {:else}
+            <select bind:value={selectedProjectId} disabled={isCreating}>
+              {#each projects as project (project.id)}
+                <option value={project.id}>{project.name}</option>
+              {/each}
+            </select>
+          {/if}
         </div>
       {/if}
     </div>

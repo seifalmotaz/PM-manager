@@ -18,12 +18,14 @@
     status,
     onDrop,
     onTaskClick,
+    showOrgBadges = false,
   }: {
     title: string
     tasks: TaskSummary[]
     status: string
     onDrop: (taskId: string, targetStatus: string) => Promise<void>
     onTaskClick: (task: TaskSummary) => void
+    showOrgBadges?: boolean
   } = $props()
 
   let dragState: DragState = $state({
@@ -135,7 +137,7 @@
         onpointerdown={(e) => startDrag(e, task.id)}
         style="touch-action: none"
       >
-        <TaskCard task={task} onclick={() => onTaskClick(task)} />
+        <TaskCard task={task} onclick={() => onTaskClick(task)} {showOrgBadges} />
       </div>
     {/each}
     

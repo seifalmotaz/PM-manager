@@ -2,13 +2,16 @@
   import type { TaskSummary } from '$lib/stores/tasks'
   import { Clock, Calendar, MoreVertical } from 'lucide-svelte'
   import { clsx } from 'clsx'
+  import OrgBadge from './OrgBadge.svelte'
 
   let {
     task,
     onclick,
+    showOrgBadges = false,
   }: {
     task: TaskSummary
     onclick: () => void
+    showOrgBadges?: boolean
   } = $props()
 
   function priorityColor(priority: string): string {
@@ -73,6 +76,9 @@
   
   <div class="card-content">
     <div class="card-title-row">
+      {#if showOrgBadges && task.organization}
+        <OrgBadge name={task.organization.name} />
+      {/if}
       <span class="task-title">{task.title}</span>
     </div>
 

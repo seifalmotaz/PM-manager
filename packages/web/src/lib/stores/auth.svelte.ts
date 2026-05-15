@@ -1,4 +1,5 @@
 import { trpc } from '$lib/trpc'
+import { setOrganizations } from '$lib/stores/organization.svelte'
 
 const _auth = $state({
   currentUser: null as { id: string; email: string; name: string; avatarUrl: string | null } | null,
@@ -38,8 +39,13 @@ async function logout() {
 async function handleCallback(code: string) {
   const result = await trpc.auth.callback.mutate({ code })
   _auth.currentUser = result.user
+
+  // IMPORTANT: Set organizations from auth callback
+  if (result.organizations) {
+    setOrganizations(result.organizations)
+  }
+
   return result
 }
 
 export { getAuth, isAuthenticated, fetchSession, login, logout, handleCallback }
-

@@ -21,9 +21,30 @@ export const orgSessionRouter = router({
       return orgSessionService.getActiveSession(ctx.user.id, input.organizationId)
     }),
 
+  getAllActive: protectedProcedure.query(async ({ ctx }) => {
+    return orgSessionService.getAllActiveSessions(ctx.user.id)
+  }),
+
   list: protectedProcedure
     .input(z.object({ limit: z.number().optional() }))
     .query(async ({ ctx, input }) => {
       return orgSessionService.getUserSessions(ctx.user.id, input.limit ?? 20)
+    }),
+
+  getOldLive: protectedProcedure.query(async ({ ctx }) => {
+    return orgSessionService.getOldLiveSessions(ctx.user.id)
+  }),
+
+  retroactivelyClose: protectedProcedure
+    .input(z.object({
+      sessionId: z.string(),
+      endTime: z.string().datetime(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      return orgSessionService.retroactivelyCloseSession(
+        input.sessionId,
+        ctx.user.id,
+        new Date(input.endTime),
+      )
     }),
 })

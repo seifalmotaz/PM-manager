@@ -3,42 +3,97 @@
   import { getAuth, isAuthenticated, fetchSession } from '$lib/stores/auth.svelte'
   import { fetchWorkspaces, activeFilterIds } from '$lib/stores/workspaces'
   import { fetchOverdueCount, selectedTask, fetchTasks } from '$lib/stores/tasks'
+  import { getOrganization, loadActiveOrganization } from '$lib/stores/organization.svelte'
+  import { trpc } from '$lib/trpc'
   import {
     Home,
-    BarChart2,
     Layers,
+    BarChart2,
+    Users,
+    LayoutDashboard,
     Search,
     Settings,
     ChevronLeft,
     ChevronRight,
-    Plus
+    Plus,
   } from 'lucide-svelte'
   import { clsx } from 'clsx'
+  import OrgSwitcher from '$lib/components/OrgSwitcher.svelte'
   import CommandPalette from '$lib/components/CommandPalette.svelte'
   import QuickAddModal from '$lib/components/QuickAddModal.svelte'
-  import WorkspaceFilter from '$lib/components/WorkspaceFilter.svelte'
   import DeadlineBadge from '$lib/components/DeadlineBadge.svelte'
   import TaskDetail from '$lib/components/TaskDetail.svelte'
   import NotificationBell from '$lib/components/NotificationBell.svelte'
+  import ClockInOutButton from '$lib/components/ClockInOutButton.svelte'
+  import SessionPill from '$lib/components/SessionPill.svelte'
+  import SessionOverflow from '$lib/components/SessionOverflow.svelte'
+  import { getSessions, fetchActiveSessions, startElapsedTimer, stopElapsedTimer } from '$lib/stores/org-sessions.svelte'
+  import RetroactiveCloseDialog from '$lib/components/RetroactiveCloseDialog.svelte'
 
   let { children } = $props()
   let isSidebarCollapsed = $state(true)
   let isCommandPaletteOpen = $state(false)
   let isQuickAddOpen = $state(false)
+  let retroactiveSession = $state<{ sessionId: string; organizationName: string; startTime: string } | null>(null)
+  let hasCheckedRetroactive = $state(false)
 
-  // Derive detail panel state from store
   let isDetailPanelOpen = $derived($selectedTask !== null)
+
+  let currentOrgSlug = $derived($page.params.orgSlug ?? '')
 
   $effect(() => {
     fetchSession()
   })
 
   $effect(() => {
+    const auth = getAuth()
+    if (auth.isLoading) return
     fetchWorkspaces()
     fetchOverdueCount()
+    loadActiveOrganization()
+    // After auth resolves, also fetch active sessions
+    if (auth.currentUser) {
+      fetchActiveSessions()
+      startElapsedTimer()
+    }
   })
 
-  // Global shortcut: Cmd+N / Ctrl+N to open QuickAdd
+  // Check for old live sessions (retroactive close)
+  // Do this once per session, after auth resolves
+  $effect(() => {
+    if (getAuth().currentUser && !hasCheckedRetroactive) {
+      checkForOldSessions()
+    }
+  })
+
+  async function checkForOldSessions() {
+    try {
+      const oldSessions = await trpc.orgSession.getOldLive.query() as any[]
+      hasCheckedRetroactive = true
+
+      if (oldSessions && oldSessions.length > 0) {
+        const session = oldSessions[0]
+        const orgs = getOrganization().organizations
+        const org = orgs.find((o: any) => o.id === session.organizationId)
+        retroactiveSession = {
+          sessionId: session.id,
+          organizationName: org?.name ?? 'Unknown Org',
+          startTime: session.startTime,
+        }
+      }
+    } catch (err) {
+      console.error('Failed to check old sessions:', err)
+      hasCheckedRetroactive = true
+    }
+  }
+
+  // Cleanup timer on unmount
+  $effect(() => {
+    return () => {
+      stopElapsedTimer()
+    }
+  })
+
   $effect(() => {
     function handleGlobalKeydown(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key === 'n') {
@@ -59,7 +114,18 @@
     fetchOverdueCount()
   }
 
-  
+  let navItems = $derived.by(() => {
+    const slug = currentOrgSlug
+    if (!slug) return []
+
+    return [
+      { href: `/${slug}`, label: 'Home', icon: Home },
+      { href: `/${slug}/projects`, label: 'Projects', icon: Layers },
+      { href: `/${slug}/velocity`, label: 'Velocity', icon: BarChart2 },
+      { href: `/${slug}/people`, label: 'People', icon: Users },
+      { href: `/${slug}/overview`, label: 'Overview', icon: LayoutDashboard },
+    ]
+  })
 </script>
 
 <div class={clsx('app-shell', isSidebarCollapsed && 'sidebar-collapsed', isDetailPanelOpen && 'detail-open')}>
@@ -80,6 +146,18 @@
     </div>
 
     <nav class="sidebar-nav">
+      {#each navItems as item (item.href)}
+        <a
+          href={item.href}
+          class="nav-link"
+          aria-current={$page.url.pathname === item.href ? 'page' : undefined}
+        >
+          <item.icon size={20} />
+          {#if !isSidebarCollapsed}
+            <span class="nav-label">{item.label}</span>
+          {/if}
+        </a>
+      {/each}
     </nav>
 
     <div class="sidebar-footer">
@@ -95,21 +173,33 @@
   <!-- Top bar -->
   <header class="topbar">
     <div class="topbar-left">
-      <button class="command-trigger" onclick={() => isCommandPaletteOpen = true}>
-        <Search size={16} />
-        <span class="command-placeholder">Search or type a command...</span>
-        <span class="command-shortcut">⌘K</span>
-      </button>
-    </div>
-
-    <div class="topbar-center">
-      <WorkspaceFilter />
+      <div class="topbar-left-row">
+        <OrgSwitcher />
+        <div class="topbar-divider"></div>
+        <button class="command-trigger" onclick={() => (isCommandPaletteOpen = true)}>
+          <Search size={16} />
+          <span class="command-placeholder">Search or type a command...</span>
+          <span class="command-shortcut">⌘K</span>
+        </button>
+      </div>
     </div>
 
     <div class="topbar-right">
+      <ClockInOutButton />
+
+      {#if getSessions().sessions.length > 0}
+        {#if getSessions().sessions.length <= 2}
+          {#each getSessions().sessions as s (s.session.id)}
+            <SessionPill sessionId={s.session.id} />
+          {/each}
+        {:else}
+          <SessionOverflow />
+        {/if}
+      {/if}
+
       <DeadlineBadge />
       <NotificationBell />
-      <button class="quick-add-btn" onclick={() => isQuickAddOpen = true}>
+      <button class="quick-add-btn" onclick={() => (isQuickAddOpen = true)}>
         <Plus size={20} />
         <span>New Task</span>
       </button>
@@ -135,17 +225,25 @@
     {/if}
   </main>
 
-  <CommandPalette bind:isOpen={isCommandPaletteOpen} onNewTask={() => isQuickAddOpen = true} />
+  <CommandPalette bind:isOpen={isCommandPaletteOpen} onNewTask={() => (isQuickAddOpen = true)} />
 
   <QuickAddModal bind:isOpen={isQuickAddOpen} onCreated={handleQuickAddCreated} />
 
-  <!-- Detail Panel (Right) -->
   {#if isDetailPanelOpen && $selectedTask}
     <aside class="detail-panel">
       {#key $selectedTask.id}
         <TaskDetail task={$selectedTask} onRefresh={() => { fetchTasks($activeFilterIds); fetchOverdueCount() }} />
       {/key}
     </aside>
+  {/if}
+
+  {#if retroactiveSession}
+    <RetroactiveCloseDialog
+      sessionId={retroactiveSession.sessionId}
+      organizationName={retroactiveSession.organizationName}
+      startTime={retroactiveSession.startTime}
+      onClose={() => (retroactiveSession = null)}
+    />
   {/if}
 </div>
 
@@ -253,6 +351,7 @@
     height: 48px;
     font-weight: 500;
     overflow: hidden;
+    text-decoration: none;
   }
 
   .sidebar-collapsed .nav-link {
@@ -293,17 +392,23 @@
 
   .topbar-left {
     flex: 1;
-    max-width: 600px;
+    max-width: 700px;
   }
 
-  .topbar-center {
-    flex: 1;
+  .topbar-left-row {
     display: flex;
-    justify-content: center;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .topbar-divider {
+    width: 1px;
+    height: 24px;
+    background-color: var(--border-main);
+    opacity: 0.5;
   }
 
   .command-trigger {
-    width: 100%;
     display: flex;
     align-items: center;
     gap: 0.75rem;
@@ -312,6 +417,7 @@
     padding: 0.5rem 0;
     color: var(--text-muted);
     transition: color 0.15s;
+    flex: 1;
   }
 
   .command-trigger:hover {
@@ -424,7 +530,6 @@
     z-index: 10;
   }
 
-  /* Responsive Adjustments */
   @media (max-width: 1024px) {
     .app-shell.detail-open {
       grid-template-columns: var(--sidebar-width) 1fr 0px;

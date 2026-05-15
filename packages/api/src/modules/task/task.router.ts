@@ -2,6 +2,8 @@ import { z } from 'zod'
 import { router, protectedProcedure, adminProcedure } from '../../trpc'
 import { taskService } from './task.service'
 import { parseTaskInput } from './nlp-parser'
+import { orgSessions } from '../../db/schema'
+import { db } from '../../db/connection'
 
 export const taskRouter = router({
   parse: protectedProcedure
@@ -103,4 +105,46 @@ export const taskRouter = router({
   search: protectedProcedure
     .input(z.object({ query: z.string().min(1), workspaceIds: z.array(z.string().uuid()).optional() }))
     .query(({ input, ctx }) => taskService.searchTasks(input.query, input.workspaceIds, ctx.user.id)),
+
+  listByOrg: protectedProcedure
+    .input(z.object({ organizationId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      return taskService.listTasksByOrg(input.organizationId, ctx.user.id)
+    }),
+
+  completeWithCrossOrgSession: protectedProcedure
+    .input(z.object({
+      taskId: z.string().uuid(),
+      organizationId: z.string(),
+      startTime: z.string().datetime().optional(),
+      endTime: z.string().datetime().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      // First change the task status to done
+      const task = await taskService.changeStatus(input.taskId, 'done', ctx.user.id)
+
+      // Create a backdated org session for the cross-org work
+      const startTime = input.startTime
+        ? new Date(input.startTime)
+        : (task.startedAt || new Date())
+      const endTime = input.endTime
+        ? new Date(input.endTime)
+        : new Date()
+
+      const [session] = await db
+        .insert(orgSessions)
+        .values({
+          userId: ctx.user.id,
+          organizationId: input.organizationId,
+          startTime,
+          endTime,
+          tasksCompleted: 1,
+          storyPointsCompleted: task.storyPoints || '0',
+          estimatedHoursSum: task.estimatedHours || '0',
+          note: 'Auto-created from cross-org completion',
+        })
+        .returning()
+
+      return { task, session }
+    }),
 })

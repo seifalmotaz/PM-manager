@@ -3,6 +3,12 @@ import { router, protectedProcedure, adminProcedure } from '../../trpc'
 import { projectService } from './project.service'
 
 export const projectRouter = router({
+  listByOrg: protectedProcedure
+    .input(z.object({ organizationId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      return projectService.listByOrg(input.organizationId, ctx.user.id)
+    }),
+
   list: protectedProcedure
     .input(
       z.object({

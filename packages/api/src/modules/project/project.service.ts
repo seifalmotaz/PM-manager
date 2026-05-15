@@ -1,9 +1,35 @@
 import { db } from '../../db/connection'
-import { projects } from '../../db/schema'
-import { eq, asc } from 'drizzle-orm'
+import { projects, workspaces, workspaceMembers } from '../../db/schema'
+import { eq, and, inArray, asc } from 'drizzle-orm'
 import { createAuditLog } from '../../shared/audit/audit.service'
 import { workspaceService } from '../workspace/workspace.service'
 import { TRPCError } from '@trpc/server'
+
+async function listByOrg(organizationId: string, userId: string) {
+  // Find all workspaces belonging to this org where user is a member
+  const userWss = await db
+    .select({ wsId: workspaces.id })
+    .from(workspaceMembers)
+    .innerJoin(workspaces, eq(workspaces.id, workspaceMembers.workspaceId))
+    .where(
+      and(
+        eq(workspaceMembers.userId, userId),
+        eq(workspaces.organizationId, organizationId),
+      ),
+    )
+
+  const wsIds = userWss.map(row => row.wsId)
+  if (wsIds.length === 0) return []
+
+  // Find projects in those workspaces
+  const rows = await db
+    .select()
+    .from(projects)
+    .where(inArray(projects.workspaceId, wsIds))
+    .orderBy(asc(projects.createdAt))
+
+  return rows
+}
 
 async function listProjects(workspaceId: string | undefined, userId: string) {
   if (workspaceId) {
@@ -152,6 +178,7 @@ async function deleteProject(id: string, userId: string) {
 }
 
 export const projectService = {
+  listByOrg,
   listProjects,
   getProject,
   createProject,

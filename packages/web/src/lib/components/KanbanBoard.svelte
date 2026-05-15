@@ -6,10 +6,12 @@
     tasks,
     onStatusChange,
     onTaskClick,
+    showOrgBadges = true,
   }: {
     tasks: TaskSummary[]
     onStatusChange: (taskId: string, newStatus: string) => Promise<void>
     onTaskClick: (task: TaskSummary) => void
+    showOrgBadges?: boolean
   } = $props()
 
   let tasksByColumn = $derived.by(() => {
@@ -44,6 +46,7 @@
         status={column.id}
         onDrop={(taskId, targetStatus) => onStatusChange(taskId, targetStatus)}
         onTaskClick={onTaskClick}
+        {showOrgBadges}
       />
     {/each}
   </div>

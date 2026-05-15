@@ -2,6 +2,7 @@
   import { goto } from '$app/navigation'
   import { page } from '$app/stores'
   import { handleCallback } from '$lib/stores/auth.svelte'
+  import { getOrganization } from '$lib/stores/organization.svelte'
 
   $effect(() => {
     async function processCallback() {
@@ -12,7 +13,12 @@
       }
       try {
         await handleCallback(code)
-        goto('/')
+        const orgState = getOrganization()
+        if (orgState.activeOrganization) {
+          goto(`/${orgState.activeOrganization.slug}`)
+        } else {
+          goto('/')
+        }
       } catch {
         goto('/auth/login?error=auth_failed')
       }

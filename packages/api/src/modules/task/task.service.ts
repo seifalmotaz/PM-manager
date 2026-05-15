@@ -1,5 +1,5 @@
 import { db } from '../../db/connection'
-import { tasks, projects, workspaceMembers, sprints } from '../../db/schema'
+import { tasks, projects, workspaceMembers, sprints, workspaces } from '../../db/schema'
 import { eq, and, lt, ne, asc, inArray, count, or, ilike } from 'drizzle-orm'
 import { createAuditLog, auditFieldChange } from '../../shared/audit/audit.service'
 import { projectService } from '../project/project.service'
@@ -485,6 +485,48 @@ async function searchTasks(query: string, workspaceIds: string[] | undefined, us
   }
 }
 
+async function listTasksByOrg(organizationId: string, userId: string) {
+  // Find all workspaces belonging to this org where user is a member
+  const userWss = await db
+    .select({ wsId: workspaces.id })
+    .from(workspaceMembers)
+    .innerJoin(workspaces, eq(workspaces.id, workspaceMembers.workspaceId))
+    .where(
+      and(
+        eq(workspaceMembers.userId, userId),
+        eq(workspaces.organizationId, organizationId),
+      ),
+    )
+
+  const wsIds = userWss.map(row => row.wsId)
+  if (wsIds.length === 0) return []
+
+  // Find projects in those workspaces
+  const projRows = await db
+    .select({ id: projects.id })
+    .from(projects)
+    .where(inArray(projects.workspaceId, wsIds))
+
+  const projectIds = projRows.map(p => p.id)
+  if (projectIds.length === 0) return []
+
+  // Fetch tasks from those projects
+  const rows = await db
+    .select({
+      task: tasks,
+      project: projects,
+    })
+    .from(tasks)
+    .leftJoin(projects, eq(tasks.projectId, projects.id))
+    .where(inArray(tasks.projectId, projectIds))
+    .orderBy(asc(tasks.createdAt))
+
+  return rows.map(row => ({
+    ...row.task,
+    project: row.project,
+  }))
+}
+
 export const taskService = {
   parseTaskInput,
   listTasks,
@@ -496,4 +538,5 @@ export const taskService = {
   getOverdueCount,
   listHome,
   searchTasks,
+  listTasksByOrg,
 }

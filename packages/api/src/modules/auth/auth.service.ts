@@ -1,6 +1,6 @@
 import { WorkOS } from '@workos-inc/node'
 import { db } from '../../db/connection'
-import { users, workspaces, workspaceMembers } from '../../db/schema'
+import { users, workspaces, workspaceMembers, organizationSettings } from '../../db/schema'
 import { eq } from 'drizzle-orm'
 
 const workos = new WorkOS(process.env.WORKOS_API_KEY!, {
@@ -79,7 +79,56 @@ async function exchangeCode(code: string) {
     })
   }
 
-  return { user, isNew }
+  // Fetch user's organizations via organization memberships from WorkOS
+  let organizations: Array<{ id: string; name: string; slug: string }> = []
+  try {
+    const memberships = await workos.userManagement.listOrganizationMemberships({
+      userId: workosUser.id,
+    })
+
+    organizations = (memberships.data || []).map((membership: any) => ({
+      id: membership.organizationId,
+      name: membership.organizationName,
+      slug: (membership.organizationName || '').toLowerCase().replace(/\s+/g, '-'),
+    }))
+
+    // Auto-create organization_settings for each org (with defaults)
+    for (const org of organizations) {
+      const [existingSettings] = await db
+        .select()
+        .from(organizationSettings)
+        .where(eq(organizationSettings.organizationId, org.id))
+        .limit(1)
+
+      if (!existingSettings) {
+        await db.insert(organizationSettings).values({
+          organizationId: org.id,
+        }).onConflictDoNothing()
+      }
+    }
+  } catch (err) {
+    // If WorkOS org listing fails, non-critical — user can still use personal workspace
+    console.warn('Failed to fetch WorkOS organizations:', err)
+    organizations = []
+  }
+
+  return { user, isNew, organizations }
 }
 
-export const authService = { getAuthorizationUrl, exchangeCode }
+async function listOrganizations(workosUserId: string) {
+  try {
+    const memberships = await workos.userManagement.listOrganizationMemberships({
+      userId: workosUserId,
+    })
+    return (memberships.data || []).map((membership: any) => ({
+      id: membership.organizationId,
+      name: membership.organizationName,
+      slug: (membership.organizationName || '').toLowerCase().replace(/\s+/g, '-'),
+    }))
+  } catch (err) {
+    console.warn('Failed to fetch WorkOS organizations:', err)
+    return []
+  }
+}
+
+export const authService = { getAuthorizationUrl, exchangeCode, listOrganizations }

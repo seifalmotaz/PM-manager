@@ -11,21 +11,22 @@ export const authRouter = router({
   callback: publicProcedure
     .input(z.object({ code: z.string().min(1) }))
     .mutation(async ({ input, ctx }) => {
-      const { user, isNew } = await authService.exchangeCode(input.code)
+      const result = await authService.exchangeCode(input.code)
 
-      const cookieValue = `session=${user.id}; HttpOnly; Path=/; SameSite=Lax; Max-Age=2592000${
+      const cookieValue = `session=${result.user.id}; HttpOnly; Path=/; SameSite=Lax; Max-Age=2592000${
         process.env.NODE_ENV === 'production' ? '; Secure' : ''
       }`
       ctx.resHeaders.set('Set-Cookie', cookieValue)
 
       return {
         user: {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          avatarUrl: user.avatarUrl,
+          id: result.user.id,
+          email: result.user.email,
+          name: result.user.name,
+          avatarUrl: result.user.avatarUrl,
         },
-        isNew,
+        organizations: result.organizations,
+        isNew: result.isNew,
       }
     }),
 
