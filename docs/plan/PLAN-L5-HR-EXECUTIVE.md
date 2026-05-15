@@ -1,623 +1,308 @@
 # Saha — Level 5: HR & Executive
 
-**Version:** 1.0
-**Date:** May 15, 2026
-**Status:** Approved
-**Theme:** Organization dashboard, employee directory, HR visibility. The "company pays" version.
+**Version:** 2.0  
+**Date:** May 15, 2026  
+**Status:** Approved  
+**Type:** Product Requirements & Specification  
 
 ---
 
 ## Objective
 
-Build the organization-level views that make a company pay for Saha. The executive gets a 30-second health check dashboard. The HR manager gets an employee directory and workforce visibility. This level converts the individual adoption into company-wide adoption.
+Build the organization-level views that convert individual adoption into company-wide adoption. The executive gets a 30-second health check dashboard. The HR manager gets an employee directory with workforce visibility. This is the "company pays" version.
 
 ---
 
-## Architecture
+## Decision Log (Grilled Questions & Answers)
 
-### Route Structure
+### Decision 1: Organization dashboard — single page, role-based, or separate pages?
 
-```
-/:orgSlug/overview  → Executive overview dashboard
-/:orgSlug/people    → HR employee directory
-```
+**Question:** The executive needs org-level metrics. The HR manager needs people data. Do we show all of this on one dashboard, split by role, or create separate pages?
 
-**Separate pages, not role-based views.** Users navigate to the page they need. Executive uses `/overview`. HR uses `/people`. PMs and admins can access both.
+**Resolution (Option C from grilling):** Separate pages.
 
----
+**Routes:**
+- `/:orgSlug/overview` — Executive dashboard (org health, sprints, recent activity)
+- `/:orgSlug/people` — HR employee directory
 
-## 1. Executive Overview Dashboard
+**Why separate pages:** The executive and HR manager have fundamentally different needs. The executive wants metrics and trends. The HR manager wants people lists and individual profiles. Combining them on one page means both audiences scroll past irrelevant content. Separate pages mean each user goes directly to what they need.
 
-**Route:** `/:orgSlug/overview`
-
-**Purpose:** 30-second organizational health scan. The first page an executive opens in the morning.
-
-### Layout
-
-```
-┌──────────────────────────────────────────────────────────────────────┐
-│  Overview  ← Acme Corp                                              │
-├──────────────────────────────────────────────────────────────────────┤
-│                                                                       │
-│  ┌─────────────────────┐  ┌─────────────────────┐                   │
-│  │  ORG HEALTH          │  │  SPRINT DELIVERY    │                   │
-│  │                      │  │                      │                   │
-│  │  3 Active Sprints    │  │  Sprint 5          │                   │
-│  │  7 Overdue Tasks     │  │  ████████░░ 80%    │                   │
-│  │  Velocity ↑ 12%      │  │  Sprint 4 Complete │                   │
-│  │                      │  │  ██████████ 100%   │                   │
-│  └─────────────────────┘  └─────────────────────┘                   │
-│                                                                       │
-│  ┌─────────────────────────────────────────────────────────────┐    │
-│  │  RECENT ACTIVITY                                              │    │
-│  │                                                               │    │
-│  │  Today                                                       │    │
-│  │  ─────                                                       │    │
-│  │  9:30 AM  Sarah clocked into Acme Corp                      │    │
-│  │  10:15 AM  "Fix login bug" marked Done by Alex (3 SP)       │    │
-│  │  11:00 AM  "API rate limit" moved to Review by Ahmed        │    │
-│  │                                                               │    │
-│  │  Yesterday                                                   │    │
-│  │  ─────────                                                   │    │
-│  │  4:30 PM  Sprint 5 completed (28/35 SP)                     │    │
-│  │  2:00 PM  "Dashboard redesign" marked Done by Sarah (8 SP)   │    │
-│  │  ...                                                         │    │
-│  └─────────────────────────────────────────────────────────────┘    │
-│                                                                       │
-└──────────────────────────────────────────────────────────────────────┘
-```
-
-### Widget 1: Org Health Summary
-
-**Data:**
-
-| Metric | Source | Display |
-|--------|--------|---------|
-| Active sprints | `SELECT COUNT(*) FROM sprints WHERE status = 'active' AND organization_id = :orgId` | "3 Active Sprints" |
-| Overdue tasks | `SELECT COUNT(*) FROM tasks WHERE status != 'done' AND deadline < NOW() AND organization_id = :orgId` | "7 Overdue Tasks" (red if > 0) |
-| Velocity trend | Compare current sprint velocity to average of last 3 sprints | "↑ 12%" (green if positive, red if negative) |
-
-**Component:**
-
-```svelte
-<!-- /packages/web/src/lib/components/executive/OrgHealthSummary.svelte -->
-<script lang="ts">
-  let activeSprints = $state(0)
-  let overdueCount = $state(0)
-  let velocityTrend = $state({ direction: 'up' as 'up' | 'down' | 'flat', percentage: 0 })
-  
-  async function load() {
-    const health = await trpc.organization.health.query({
-      organizationId: $activeOrg.id,
-    })
-    activeSprints = health.activeSprints
-    overdueCount = health.overdueTasks
-    velocityTrend = health.velocityTrend
-  }
-</script>
-
-<div class="widget org-health">
-  <h3>Org Health</h3>
-  
-  <div class="health-metrics">
-    <div class="metric">
-      <span class="value">{activeSprints}</span>
-      <span class="label">Active Sprints</span>
-    </div>
-    
-    <div class="metric" class:critical={overdueCount > 0}>
-      <span class="value">{overdueCount}</span>
-      <span class="label">Overdue Tasks</span>
-      <span class="alert">⚠</span>
-    </div>
-    
-    <div class="metric trend" class:positive={velocityTrend.direction === 'up'} class:negative={velocityTrend.direction === 'down'}>
-      <span class="value">
-        {#if velocityTrend.direction === 'up'}↑
-        {:else if velocityTrend.direction === 'down'}↓
-        {:else}→
-        {/if}
-        {velocityTrend.percentage}%
-      </span>
-      <span class="label">Velocity</span>
-    </div>
-  </div>
-</div>
-```
-
-### Widget 2: Sprint Delivery
-
-**Data from active and recently completed sprints.**
-
-```svelte
-<!-- /packages/web/src/lib/components/executive/SprintDelivery.svelte -->
-<script lang="ts">
-  let sprints = $state<{
-    id: string
-    name: string
-    status: 'active' | 'completed'
-    progress: number  // 0-100
-    plannedSP: number
-    completedSP: number
-    daysRemaining: number
-  }[]>([])
-</script>
-
-<div class="widget sprint-delivery">
-  <h3>Sprint Delivery</h3>
-  
-  {#each sprints as sprint}
-    <div class="sprint-row" class:active={sprint.status === 'active'} class:completed={sprint.status === 'completed'}>
-      <div class="sprint-header">
-        <span class="name">{sprint.name}</span>
-        <span class="status-badge">{sprint.status}</span>
-      </div>
-      
-      <div class="progress-bar">
-        <div class="fill" style="width: {sprint.progress}%"></div>
-      </div>
-      
-      <div class="details">
-        <span>{sprint.completedSP}/{sprint.plannedSP} SP</span>
-        {#if sprint.status === 'active'}
-          <span>{sprint.daysRemaining} days left</span>
-        {/if}
-      </div>
-    </div>
-  {/each}
-</div>
-```
-
-### Widget 3: Recent Activity
-
-**Real-time activity feed aggregated across the org.**
-
-```typescript
-// Backend: Aggregated activity feed
-async function getRecentActivity(organizationId: string, limit = 20): Promise<ActivityEvent[]> {
-  return await db
-    .select({
-      id: auditLogs.id,
-      action: auditLogs.action,
-      entityType: auditLogs.entityType,
-      entityId: auditLogs.entityId,
-      userId: auditLogs.userId,
-      oldValue: auditLogs.oldValue,
-      newValue: auditLogs.newValue,
-      createdAt: auditLogs.createdAt,
-    })
-    .from(auditLogs)
-    .where(eq(auditLogs.entityType, sql`ANY(ARRAY['task', 'sprint', 'project'])`))
-    .orderBy(desc(auditLogs.createdAt))
-    .limit(limit)
-}
-```
-
-**Display Logic:**
-
-```svelte
-<!-- /packages/web/src/lib/components/executive/RecentActivity.svelte -->
-<script lang="ts">
-  let activities = $state<ActivityEvent[]>([])
-  
-  function formatEvent(event: ActivityEvent): string {
-    const userName = getUserName(event.userId)
-    const entityName = getEntityName(event.entityType, event.entityId)
-    
-    switch (event.action) {
-      case 'status_changed':
-        return `${userName} moved "${entityName}" from ${event.oldValue} to ${event.newValue}`
-      case 'created':
-        return `${userName} created ${event.entityType} "${entityName}"`
-      case 'completed':
-        return `${userName} marked "${entityName}" Done (${event.newValue} SP)`
-      case 'deleted':
-        return `${userName} deleted ${event.entityType} "${entityName}"`
-      default:
-        return `${userName} ${event.action} ${event.entityType} "${entityName}"`
-    }
-  }
-  
-  function groupByDay(events: ActivityEvent[]): Map<string, ActivityEvent[]> {
-    const groups = new Map<string, ActivityEvent[]>()
-    for (const event of events) {
-      const day = formatDay(event.createdAt)
-      if (!groups.has(day)) groups.set(day, [])
-      groups.get(day)!.push(event)
-    }
-    return groups
-  }
-</script>
-
-<div class="widget recent-activity">
-  <h3>Recent Activity</h3>
-  
-  {#each [...groupByDay(activities)] as [day, events]}
-    <div class="day-group">
-      <h4 class="day-label">{day}</h4>
-      {#each events as event}
-        <div class="activity-item">
-          <span class="time">{formatTime(event.createdAt)}</span>
-          <span class="description">{formatEvent(event)}</span>
-        </div>
-      {/each}
-    </div>
-  {/each}
-</div>
-```
+**Navigation:** Both pages are accessible from the sidebar when viewing a specific org. The sidebar gains two new items: "Overview" and "People."
 
 ---
 
-## 2. Employee Directory
+### Decision 2: Executive overview — what widgets?
 
-**Route:** `/:orgSlug/people`
+**Question:** The executive has very limited time (5–15 min/day). What goes on the overview page to make a 30-second health check possible?
 
-**Purpose:** HR manager can see all employees across all workspaces in the organization.
+**Resolution (A + C + D from grilling):** Three widgets.
 
-### Directory Table (Basic View)
+**Widget 1 — Org Health Summary:**
+- Active sprints count: how many sprints are currently running across the org
+- Overdue tasks count: how many tasks have passed their deadline and aren't done (red if > 0)
+- Velocity trend: current sprint velocity compared to average of last 3 sprints (↑ improving, ↓ declining, → steady)
 
-```
-┌──────────────────────────────────────────────────────────────────────┐
-│  People  ← Acme Corp                                   42 Members   │
-├──────────────────────────────────────────────────────────────────────┤
-│                                                                       │
-│  [Search...]  [All Roles ▾]  [All Workspaces ▾]                    │
-│                                                                       │
-│  Name              Email                Role     Workspaces   Joined  │
-│  ────────────────────────────────────────────────────────────────── │
-│  Alexandra Chen     alex@acme.com       Owner    Dev, Mktg     Jan 12 │
-│  Jordan Smith       jordan@acme.com     Admin    Dev Team      Feb 3  │
-│  Alex Chen          alex.c@acme.com     Member   Dev Team      Mar 1  │
-│  Sarah Martinez     sarah@acme.com      Member   Dev, Mktg     Mar 15 │
-│  Ahmed Hassan       ahmed@acme.com      Member   Dev Team      Apr 2  │
-│  ...                                                                  │
-│                                                                       │
-│  ─── Past Employees ───────────────────────────────────────────── │
-│                                                                       │
-│  Fatima Ali         fatima@acme.com     Former   Dev Team      Sep 8  │
-│                                                                       │
-└──────────────────────────────────────────────────────────────────────┘
-```
+**Widget 2 — Sprint Delivery:**
+- List of active and recently completed sprints
+- Each sprint shows: name, status badge (active/completed), progress bar (% of planned SP completed), SP numbers, days remaining for active sprints
+- Purpose: "Are my active sprints on track?"
 
-**Table Columns:**
+**Widget 3 — Recent Activity:**
+- Chronological feed of significant events across the org
+- Shows: task completions (with SP), sprint completions, status changes, new org sessions started
+- Grouped by day (Today, Yesterday, Earlier this week)
+- Source: `audit_logs` table filtered by org
+- Purpose: "What happened while I wasn't looking?"
 
-| Column | Source | Format |
-|--------|--------|--------|
-| Name | `users.name` | Text, clickable → employee detail page |
-| Email | `users.email` | Text |
-| Role | `workspace_members.role` | Badge: Owner, Admin, Member, Former |
-| Workspaces | Aggregate of all `workspace_members` for this user | Comma-separated list |
-| Joined | `workspace_members.joinedAt` (earliest) | Date |
+**What's NOT on the overview page:**
+- Detailed per-task lists (that's the Kanban view)
+- Capacity utilization per person (that's the sprint capacity table)
+- Individual employee metrics (that's the people page)
 
-**Past Employees:**
-Per CONTEXT.md: departed employees appear at bottom with grayed-out style, grouped under "Past Employees."
-
-### Component
-
-```svelte
-<!-- /packages/web/src/routes/[orgSlug]/people/+page.svelte -->
-<script lang="ts">
-  import { goto } from '$app/navigation'
-  
-  let members = $state<Member[]>([])
-  let search = $state('')
-  let roleFilter = $state<'all' | 'owner' | 'admin' | 'member' | 'former'>('all')
-  let isLoading = $state(true)
-  
-  async function loadMembers() {
-    isLoading = true
-    const result = await trpc.organization.members.query({
-      organizationId: $activeOrg.id,
-      search: search || undefined,
-      role: roleFilter === 'all' ? undefined : roleFilter,
-    })
-    members = result
-    isLoading = false
-  }
-  
-  function goToMember(member: Member) {
-    // Navigate to employee detail page
-    goto(`/${$activeOrg.slug}/people/${member.userId}`)
-  }
-  
-  // Separate active and past employees
-  let activeMembers = $derived(members.filter(m => m.status === 'active'))
-  let pastMembers = $derived(members.filter(m => m.status === 'former'))
-</script>
-
-<div class="people-page">
-  <header>
-    <h1>People</h1>
-    <span class="count">{activeMembers.length} Members</span>
-  </header>
-  
-  <div class="filters">
-    <input
-      type="text"
-      bind:value={search}
-      on:input={loadMembers}
-      placeholder="Search members..."
-    />
-    <select bind:value={roleFilter} on:change={loadMembers}>
-      <option value="all">All Roles</option>
-      <option value="owner">Owner</option>
-      <option value="admin">Admin</option>
-      <option value="member">Member</option>
-    </select>
-  </div>
-  
-  {#if isLoading}
-    <Spinner />
-  {:else}
-    <table class="member-list">
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Email</th>
-          <th>Role</th>
-          <th>Workspaces</th>
-          <th>Joined</th>
-        </tr>
-      </thead>
-      <tbody>
-        {#each activeMembers as member}
-          <tr onclick={() => goToMember(member)} class="clickable-row">
-            <td class="name">{member.name}</td>
-            <td class="email">{member.email}</td>
-            <td>
-              <span class="role-badge role-{member.role}">
-                {member.role}
-              </span>
-            </td>
-            <td class="workspaces">{member.workspaces.join(', ')}</td>
-            <td class="joined">{formatDate(member.joinedAt)}</td>
-          </tr>
-        {/each}
-      </tbody>
-    </table>
-    
-    {#if pastMembers.length > 0}
-      <h3 class="past-section-header">Past Employees</h3>
-      <table class="member-list past-members">
-        <tbody>
-          {#each pastMembers as member}
-            <tr onclick={() => goToMember(member)} class="clickable-row past">
-              <td class="name">{member.name}</td>
-              <td class="email">{member.email}</td>
-              <td>
-                <span class="role-badge role-former">Former</span>
-              </td>
-              <td class="workspaces">{member.workspaces.join(', ')}</td>
-              <td class="joined">{formatDate(member.joinedAt)}</td>
-            </tr>
-          {/each}
-        </tbody>
-      </table>
-    {/if}
-  {/if}
-</div>
-```
+**Performance target:** Page must render in under 2 seconds. All three widgets load in parallel.
 
 ---
 
-## 3. Employee Detail Page (Enhanced)
+### Decision 3: Employee directory — basic or full data?
 
-**Route:** `/:orgSlug/people/:userId`
+**Question:** The HR manager needs to see all employees across all workspaces. How much data goes in the directory table vs. the detail page?
 
-Extends the existing `/:orgSlug/member/:userId` page with full HR data.
+**Resolution:** Basic columns in the directory table. Full details on the employee detail page.
 
-### Content
+**Directory table columns:**
+- Name (clickable → employee detail page)
+- Email
+- Role (badge: Owner, Admin, Member)
+- Workspaces (comma-separated list of workspace names the employee belongs to)
+- Joined date (earliest `joinedAt` across all workspaces in this org)
 
-```
-┌──────────────────────────────────────────────────────────────────────┐
-│  ← Back to People                                                   │
-│                                                                       │
-│  Sarah Martinez                                                      │
-│  sarah@acme.com                                                      │
-│  Member · Joined March 15, 2024                                      │
-│                                                                       │
-│  ┌─────────────────────────────────────────────────────────────┐    │
-│  │  Velocity History                                             │    │
-│  │                                                               │    │
-│  │  Sprint 1: 12 SP (4 tasks)                                   │    │
-│  │  Sprint 2: 15 SP (6 tasks)                                   │    │
-│  │  Sprint 3: 8 SP (3 tasks)                                    │    │
-│  │  Sprint 4: 14 SP (5 tasks)                                   │    │
-│  │  ─────────────────────────────────────                       │    │
-│  │  Average: 12.25 SP/sprint                                    │    │
-│  └─────────────────────────────────────────────────────────────┘    │
-│                                                                       │
-│  ┌─────────────────────────────────────────────────────────────┐    │
-│  │  Capacity Utilization                                         │    │
-│  │                                                               │    │
-│  │  Current Sprint: 28h / 40h (70%)          [███████░░░]       │    │
-│  │  Last Sprint:    35h / 40h (88%)          [████████░░]       │    │
-│  │  Sprint -2:      42h / 40h (105%) ⚠      [██████████]       │    │
-│  └─────────────────────────────────────────────────────────────┘    │
-│                                                                       │
-│  ┌─────────────────────────────────────────────────────────────┐    │
-│  │  Current Tasks                                                │    │
-│  │                                                               │    │
-│  │  In Progress (2):                                            │    │
-│  │    · Fix login bug (P1, 3 SP, due May 18)                   │    │
-│  │    · API refactor (P2, 5 SP, due May 20)                    │    │
-│  │                                                               │    │
-│  │  To Do (1):                                                  │    │
-│  │    · Update docs (P3, 1 SP)                                  │    │
-│  └─────────────────────────────────────────────────────────────┘    │
-│                                                                       │
-│  ┌─────────────────────────────────────────────────────────────┐    │
-│  │  Workspaces                                                   │    │
-│  │    · Dev Team (Member)                                       │    │
-│  │    · Marketing (Member)                                      │    │
-│  └─────────────────────────────────────────────────────────────┘    │
-│                                                                       │
-└──────────────────────────────────────────────────────────────────────┘
-```
+**Directory controls:**
+- Search: text input filtering by name or email (case-insensitive)
+- Role filter: dropdown (All Roles, Owner, Admin, Member)
+- Count display: "42 Members" showing current filtered count
 
-### Data Sources
+**Past employees section:**
+- Below the active employee table
+- Header: "Past Employees"
+- Employees who left the organization appear here with grayed-out styling
+- Role badge shows "Former" instead of their old role
+- Clickable to view historical data
+- Behavior defined in CONTEXT.md line 89
 
-| Section | Source | Query |
-|---------|--------|-------|
-| Velocity History | `tasks` grouped by `sprintId` | Per-sprint breakdown for this user |
-| Capacity Utilization | `employee_capacity` + `org_sessions` | Capacity vs assigned hours, sprint-over-sprint |
-| Current Tasks | `tasks` filtered by `assigneeId` | Grouped by status |
-| Workspaces | `workspace_members` for this user | List with role per workspace |
+**Data deduplication:** An employee in 3 workspaces appears as ONE row in the directory (not 3 rows). Their workspaces are aggregated. Their role is the highest across all workspaces (Owner > Admin > Member).
+
+**What's NOT in the directory table (deferred to detail page):**
+- Velocity data
+- Capacity utilization
+- Current task assignments
+- Org session history
 
 ---
 
-## 4. API Endpoints
+### Decision 4: Employee detail page — what goes on it?
 
-### Organization
+**Question:** When HR clicks an employee name, what do they see beyond the existing profile page?
 
-```
-GET  /api/trpc/organization.health      → Org health summary (active sprints, overdue, velocity trend)
-GET  /api/trpc/organization.members     → Employee directory (paginated, filterable)
-GET  /api/trpc/organization.member      → Employee detail (velocity history, capacity, tasks)
-GET  /api/trpc/organization.settings    → Get org settings
-PUT  /api/trpc/organization.settings    → Update org settings
-```
+**Resolution:** Enhanced detail page at `/:orgSlug/people/:userId`.
 
-### Backend Logic
+**Sections on the page:**
 
-```typescript
-// /packages/api/src/modules/organization/organization.service.ts
+1. **Header:** Name, email, role badge, joined date. Back button to directory.
 
-async function getOrgHealth(organizationId: string): Promise<OrgHealth> {
-  const [activeSprints, overdueTasks, velocityTrend] = await Promise.all([
-    // Active sprints count
-    db.select({ count: count() })
-      .from(sprints)
-      .innerJoin(projects, eq(sprints.projectId, projects.id))
-      .innerJoin(workspaces, eq(projects.workspaceId, workspaces.id))
-      .where(and(
-        eq(workspaces.organizationId, organizationId),
-        eq(sprints.status, 'active')
-      )),
-    
-    // Overdue tasks
-    db.select({ count: count() })
-      .from(tasks)
-      .innerJoin(projects, eq(tasks.projectId, projects.id))
-      .innerJoin(workspaces, eq(projects.workspaceId, workspaces.id))
-      .where(and(
-        eq(workspaces.organizationId, organizationId),
-        not(eq(tasks.status, 'done')),
-        lt(tasks.deadline, new Date())
-      )),
-    
-    // Velocity trend (current sprint vs average of last 3)
-    computeVelocityTrend(organizationId),
-  ])
-  
-  return {
-    activeSprints: activeSprints[0].count,
-    overdueTasks: overdueTasks[0].count,
-    velocityTrend,
-  }
-}
+2. **Velocity History:** Per-sprint breakdown table showing the employee's completed SP and task count for each sprint. Includes average SP/sprint. Last 8 sprints shown.
 
-async function getOrgMembers(organizationId: string, filters: MemberFilters): Promise<Member[]> {
-  return await db
-    .select({
-      userId: users.id,
-      name: users.name,
-      email: users.email,
-      role: workspaceMembers.role,
-      joinedAt: workspaceMembers.joinedAt,
-    })
-    .from(workspaceMembers)
-    .innerJoin(users, eq(workspaceMembers.userId, users.id))
-    .innerJoin(workspaces, eq(workspaceMembers.workspaceId, workspaces.id))
-    .where(and(
-      eq(workspaces.organizationId, organizationId),
-      filters.role ? eq(workspaceMembers.role, filters.role) : undefined,
-      filters.search ? ilike(users.name, `%${filters.search}%`) : undefined,
-    ))
-}
-```
+3. **Capacity Utilization:** For the current sprint and last 2 sprints: capacity hours, estimated hours assigned, utilization percentage. Overload warning (>100%) highlighted.
+
+4. **Current Tasks:** Grouped by status (In Progress, To Do). Each task shows title, priority, story points, due date. Excludes "Done" tasks (those are in velocity history).
+
+5. **Workspaces:** List of workspaces the employee belongs to, with their role in each.
+
+**Data freshness:** All data is live. Velocity history updates as sprints complete and tasks are marked done. Capacity utilization updates as PM adjusts capacity or tasks are assigned.
 
 ---
 
-## 5. Navigation Integration
+### Decision 5: Navigation integration
 
-### Sidebar Update
+**Question:** How do users discover and navigate to the new org-level pages?
 
-Add "Overview" and "People" to the sidebar when viewing a specific org.
+**Resolution:** Sidebar expansion.
 
-```svelte
-<!-- /packages/web/src/routes/[orgSlug]/+layout.svelte -->
-<script lang="ts">
-  export let data
-  
-  let navItems = $derived([
-    { label: 'Home', icon: Home, href: `/${data.org.slug}` },
-    { label: 'Projects', icon: Layers, href: `/${data.org.slug}/projects` },
-    { label: 'Velocity', icon: BarChart2, href: `/${data.org.slug}/velocity` },
-    { label: 'Overview', icon: Activity, href: `/${data.org.slug}/overview` },
-    { label: 'People', icon: Users, href: `/${data.org.slug}/people` },
-  ])
-</script>
-```
+**When viewing a specific org** (`/:orgSlug/*`):
 
----
+The sidebar shows:
+- Home (per-org)
+- Projects
+- Velocity
+- Overview (NEW)
+- People (NEW)
 
-## Testing Requirements
+**When on My Work** (`/`):
 
-### Unit Tests
+The sidebar shows:
+- My Work
+- (No org-specific items — no org is selected)
 
-- [ ] Org health summary computes metrics correctly
-- [ ] Sprint delivery shows correct progress bars
-- [ ] Recent activity formats events correctly
-- [ ] Employee directory filters by role
-- [ ] Employee directory filters by search
-- [ ] Past employees appear in separate section
-- [ ] Employee detail page shows per-sprint velocity
-- [ ] Employee detail page shows capacity utilization
-
-### Integration Tests
-
-- [ ] Executive overview loads within 2 seconds
-- [ ] Employee directory pagination works
-- [ ] Click on member name navigates to detail page
-- [ ] Velocity history shows correct sprint breakdown
-- [ ] Capacity utilization shows correct overload warnings
-
-### E2E Tests
-
-- [ ] Executive can scan org health in under 30 seconds
-- [ ] HR can search for employees by name
-- [ ] HR can filter employees by role
-- [ ] HR can view employee detail including velocity history
-- [ ] Past employees appear correctly at bottom
+**Org switcher integration:**
+- Switching orgs updates the active org store
+- Sidebar refreshes to show the selected org's pages
+- The org switcher and sidebar are independent — you can be on any org page and still see the full sidebar
 
 ---
 
-## Dependencies
+## User Stories (L5 Scope)
 
-- L0 (Foundation) must be complete
-- L1 (Multi-Org Core) must be complete
-- L2 (Task & Sprint Flow) must be complete
-- L3 (Visibility & Intelligence) must be complete
-- L4 (Collaboration & Polish) must be complete
-- `organization_settings` table populated
-- `org_sessions` data available for capacity computations
+### Executive Stories
+
+| ID | Story | Acceptance |
+|----|-------|------------|
+| EX-01 | As an executive, I want a single dashboard showing org health so I can assess everything in 30 seconds. | Overview page loads. Three widgets visible. All metrics current. |
+| EX-02 | As an executive, I want to see which sprints are on track and which are at risk so I know where to focus attention. | Sprint delivery widget shows progress bars with color coding. |
+| EX-03 | As an executive, I want to see recent activity across the org so I know what happened without asking PMs. | Activity feed shows chronological events grouped by day. |
+| EX-04 | As an executive, I want to drill into sprint details from the dashboard so I can investigate issues. | Click sprint → navigates to sprint board. |
+
+### HR Stories
+
+| ID | Story | Acceptance |
+|----|-------|------------|
+| HR-01 | As an HR manager, I want to see all employees in the org so I know who works here. | Directory renders. Search and role filters work. |
+| HR-02 | As an HR manager, I want to search for employees by name so I can find people quickly. | Search input filters directory in real-time. |
+| HR-03 | As an HR manager, I want to filter employees by role so I can see specific groups. | Role dropdown filters directory. |
+| HR-04 | As an HR manager, I want to see past employees separately so I can access historical data without cluttering active employee views. | Past employees section at bottom. Grayed-out styling. |
+| HR-05 | As an HR manager, I want to view an employee's velocity history so I can support performance conversations with data. | Detail page shows per-sprint velocity breakdown. |
+| HR-06 | As an HR manager, I want to see an employee's capacity utilization so I can identify overload or underutilization. | Detail page shows capacity utilization for current + last 2 sprints. |
+| HR-07 | As an HR manager, I want to see an employee's current tasks so I understand their workload. | Detail page shows current tasks grouped by status. |
 
 ---
 
-## Deliverables
+## User Journey: Executive Morning Check
 
-1. ✅ Executive overview dashboard (`/:orgSlug/overview`)
-2. ✅ Org Health Summary widget
-3. ✅ Sprint Delivery widget
-4. ✅ Recent Activity widget
-5. ✅ Employee directory (`/:orgSlug/people`)
-6. ✅ Directory table with search and filters
-7. ✅ Past employees section
-8. ✅ Enhanced employee detail page
-9. ✅ Velocity history per sprint
-10. ✅ Capacity utilization trends
-11. ✅ Current tasks grouped by status
-12. ✅ Workspaces with roles
-13. ✅ Sidebar updated with Overview and People links
-14. ✅ Organization API endpoints (health, members, settings)
+**7:00 AM — 30-Second Health Scan:**
+
+1. Executive opens Saha on tablet. Lands on `/` (My Work) — not the right view.
+2. Clicks org switcher → selects "Acme Corp." Navigates to `/:acme-corp`.
+3. Sees sidebar has "Overview." Clicks it. Navigates to `/:acme-corp/overview`.
+4. **Seconds 1–10:** Scans Org Health widget. "3 active sprints. 7 overdue tasks ⚠. Velocity ↑ 12%." Not great — overdue count is concerning.
+5. **Seconds 10–20:** Scans Sprint Delivery widget. Sprint 5 at 80% with 2 days left. Sprint 6 at 45% with 10 days left. Both on track.
+6. **Seconds 20–30:** Scans Recent Activity. "Yesterday: Sprint 4 completed (28/35 SP). Alex completed Dashboard redesign (8 SP). Sarah clocked 9h 15m."
+7. Mental note: "Check with Jordan about those 7 overdue tasks." Closes app. Total: 30 seconds.
+
+**Total interaction:** 30 seconds. One org switch, one sidebar click. No PM interruption needed.
+
+---
+
+## User Journey: HR Monthly Review
+
+**Friday, 3:00 PM — Prepping for Performance Conversations:**
+
+1. HR opens `/:acme-corp/people`. Sees directory: 42 active members, 1 past employee.
+2. Searches "Sarah." Directory filters to Sarah Martinez.
+3. Clicks Sarah's name → navigates to `/:acme-corp/people/sarah-martinez`.
+4. Scrolls to Velocity History:
+   - Sprint 4: 14 SP (5 tasks). Sprint 5: 8 SP (3 tasks) — drop.
+   - "Sarah's velocity dropped in Sprint 5. Was she on PTO? Need to check capacity notes."
+5. Checks Capacity Utilization. Sprint 5: Sarah had 24h capacity (was on PTO 2 days). Ah — that explains the drop.
+6. Scrolls to Current Tasks: 2 in progress, 3 in todo. 28 estimated hours against 40h capacity. Healthy.
+7. Notes for 1:1: "Velocity consistent except PTO week. Good workload balance. No overload concerns."
+8. Goes back to directory to check next employee.
+
+**Total interaction:** 3–4 minutes per employee. Data-driven, no PM interruption needed.
+
+---
+
+## Features Delivered
+
+### Executive Overview Dashboard
+- Route: `/:orgSlug/overview`
+- Org Health Summary widget (active sprints, overdue, velocity trend)
+- Sprint Delivery widget (progress bars, status indicators)
+- Recent Activity widget (chronological feed, grouped by day)
+- Click-through to sprint board and project detail
+- Under 2 second load time
+
+### Employee Directory
+- Route: `/:orgSlug/people`
+- Table with name, email, role, workspaces, joined date
+- Search by name/email
+- Filter by role
+- Past employees section with grayed-out styling
+- Click to employee detail page
+- Deduplication by employee (one row per person, not per workspace)
+
+### Enhanced Employee Detail Page
+- Route: `/:orgSlug/people/:userId`
+- Replaces existing `/:orgSlug/member/:userId` page
+- Velocity history: per-sprint breakdown (8 sprints)
+- Capacity utilization: current + last 2 sprints with overload warnings
+- Current tasks: grouped by status
+- Workspaces: list with roles
+- Back button to directory
+
+### Sidebar Enhancement
+- "Overview" link added for org-scoped views
+- "People" link added for org-scoped views
+- Only visible when an org is selected (not on My Work)
+
+---
+
+## Routes Created/Affected
+
+| Route | Status | Description |
+|-------|--------|-------------|
+| `/:orgSlug/overview` | NEW | Executive dashboard |
+| `/:orgSlug/people` | NEW | Employee directory |
+| `/:orgSlug/people/:userId` | NEW | Enhanced employee detail |
+| `/:orgSlug/member/:uid` | REMOVED | Replaced by people/:userId |
+| Sidebar layout | MODIFIED | Two new items added |
+
+---
+
+## Data Sources
+
+| Widget/Page | Primary Data Source | Secondary |
+|-------------|---------------------|-----------|
+| Org Health — active sprints | `sprints` filtered by org | — |
+| Org Health — overdue | `tasks` filtered by org, status ≠ done, deadline < now | — |
+| Org Health — velocity trend | `sprints` completed in org | Compare current vs average |
+| Sprint Delivery | `sprints` with status active or recently completed | `tasks` for SP counts |
+| Recent Activity | `audit_logs` filtered by org | User names resolved from `users` |
+| Employee Directory | `workspace_members` joined with `users` and `workspaces` | Aggregated by user |
+| Employee Detail — velocity | `tasks` filtered by assignee + sprint | `sprints` for sprint names/dates |
+| Employee Detail — capacity | `employee_capacity` for user | `tasks` for estimated hours sum |
+| Employee Detail — tasks | `tasks` filtered by assignee, status ≠ done | `projects` for project names |
+
+---
+
+## Integration Points with Other Levels
+
+### From L3:
+- Velocity page data used for executive velocity trend
+- Personal velocity data used for employee detail page
+
+### From L2:
+- Sprint completion snapshots feed sprint delivery widget
+- Task auto-capture data feeds employee velocity history
+
+### From L1:
+- Active org context scopes all executive and HR views
+- Org switcher enables navigation between org overviews
+
+### From L4:
+- Toast notifications for any errors loading dashboard/people data
+- Keyboard shortcuts active on overview and people pages
+
+---
+
+## Edge Cases Catalog
+
+| Edge Case | Resolution |
+|-----------|------------|
+| New org with 0 sprints | Health widget: "0 active sprints. Velocity: N/A." Sprint delivery: "Create your first sprint." |
+| New org with 0 employees (just the owner) | People page: "1 member" — just the owner. |
+| Employee in 5 workspaces | Directory shows all 5 workspace names. Row might be wider. Aggregated. |
+| Employee left 3 months ago | Appears in Past Employees section. Historical data preserved. |
+| Audit log has 10,000+ entries | Recent activity shows last 50 events only. Pagination deferred. |
+| Executive has no Workspace membership for a project's workspace | Executive sees org-level data from all workspaces regardless of membership (they own the org). |
+| Sprint delivery widget with 10+ active sprints | Widget scrolls. Only first 5 visible without scrolling. |
+| Employee has never completed a sprint task | Velocity history shows "—" for each sprint. "No velocity data yet." |
+| Employee was only active in a Workspace for 1 day | Joined date shows that day. Past employee section if they're gone. |
+| Two orgs with identical employee names | Directory shows emails for disambiguation. Same as Workspace member dropdown. |

@@ -1,444 +1,316 @@
 # Saha — Level 0: Foundation
 
-**Version:** 1.0  
+**Version:** 2.0  
 **Date:** May 15, 2026  
 **Status:** Approved  
-**Theme:** Schema, migrations, org architecture. Nothing user-visible yet.
+**Type:** Architecture & Database Specification
 
 ---
 
 ## Objective
 
-Build the architectural foundation that all subsequent levels depend on. This includes new database tables, schema changes, WorkOS org integration, and the active-org state management. No user-visible features ship in L0 — it's pure infrastructure.
+Build the architectural foundation that all subsequent levels depend on. This level creates the database tables, migration strategy, and WorkOS integration that make the multi-organization model possible. No user-visible features ship in L0.
 
 ---
 
-## Database Schema Changes
+## Decision Log (Grilled Questions & Answers)
 
-### 1. New Table: `organization_settings`
+### Decision 1: Do we build a full organizations table, or rely on WorkOS?
 
-Stores Saha-specific configuration per Organization. WorkOS owns org identity; this table stores Saha's internal settings.
+**Question:** WorkOS already owns organization identity and membership. Should Saha duplicate this with its own `organizations` table and `organization_members` table, or should we treat WorkOS as the single source of truth?
 
-```sql
-CREATE TABLE organization_settings (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  organization_id TEXT NOT NULL UNIQUE,  -- WorkOS org ID
-  default_sprint_length_days INTEGER NOT NULL DEFAULT 14,
-  working_hours_start TIME NOT NULL DEFAULT '09:00:00',
-  working_hours_end TIME NOT NULL DEFAULT '17:00:00',
-  working_days INTEGER[] NOT NULL DEFAULT ARRAY[1,2,3,4,5],  -- Mon=1, Tue=2, ..., Sun=0
-  timezone TEXT NOT NULL DEFAULT 'UTC',
-  require_clock_in BOOLEAN NOT NULL DEFAULT false,
-  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMP NOT NULL DEFAULT NOW()
-);
+**Resolution:** WorkOS is the source of truth. Saha does NOT build an `organizations` table. Saha stores only `organization_settings` — configuration that WorkOS cannot store (sprint defaults, working hours, timezone, etc.).
 
-CREATE INDEX idx_org_settings_org_id ON organization_settings(organization_id);
-```
+**Rationale:**
+- WorkOS already handles auth, org membership, SSO, and org identity. Duplicating this creates sync problems.
+- The `workspaces` table already has an `organizationId` field pointing to WorkOS org IDs. This field becomes the join key.
+- Saha-specific settings need a home. A new `organization_settings` table keyed to WorkOS org IDs solves this without duplicating membership data.
+
+**Rejected alternative:** Full Saha-owned organizations table. This would require syncing membership between WorkOS and Saha, creating a two-source-of-truth problem.
+
+---
+
+### Decision 2: What settings does Saha need per organization?
+
+**Question:** WorkOS stores identity. What Saha-specific configuration does Saha need that justifies the `organization_settings` table?
+
+**In-scope settings (5 fields):**
+1. `defaultSprintLengthDays` — When a PM creates a sprint, the end date auto-suggests as start date + this value. Default: 14 days.
+2. `workingHoursStart` / `workingHoursEnd` — Defines the org's typical workday. Used for clock-in defaults and auto-timeout logic. Default: 09:00–17:00.
+3. `workingDays` — Which days count as working days (e.g., Monday–Friday). Stored as an array of integers (1=Monday, 5=Friday). Affects sprint duration calculations.
+4. `timezone` — Normalizes all timestamps for timesheet aggregation and reporting. Default: UTC.
+5. `requireClockIn` — Whether the org mandates a clock-in before task status changes are allowed. Default: false (optional).
+
+**Out-of-scope settings (deferred):**
+- `retentionPolicyDays` — Deferred. Not needed until soft-delete is implemented.
+- `hrVisibilityScope` — Deferred. Not needed until HR role permissions are defined.
+
+---
+
+### Decision 3: Task-level timer vs. org-level clock-in
+
+**Question:** The existing system has a per-task timer (`timeEntries` table, `TimeTracker.svelte`). Should we keep task-level timers, or switch to org-level clock-in/out?
+
+**Resolution:** Org-level clock-in/out. Task-level timer is eliminated entirely.
+
+**Rationale (from grilling):**
+- **Product Owner's insight:** "If we do task-based time, we go through a lot of problems. What if user did not hit start when he started? What if he finished but did not remember to start this timer and it was calculated on another task timer?"
+- **Trade-off accepted:** We sacrifice per-task stopwatch precision for data reliability. Task-level duration is approximated from status transition timestamps rather than stopwatch accuracy, in exchange for never having missing or corrupted time data.
+
+**What changes:**
+- `timeEntries` table is dropped.
+- A new `org_sessions` table is created to track org-level clock-in/out.
+- Task completion data is auto-captured from the task's own timestamps (`startedAt`, `completedAt`) and recorded against the active org session.
+- The old `TimeTracker.svelte` is removed. A new org clock-in/out button lives in the topbar.
+
+---
+
+### Decision 4: How does the org session auto-enrichment work?
+
+**Question:** When a user clocks out, what data gets computed and stored in the `org_sessions` row?
+
+**Resolution:** Three auto-enriched fields are computed on clock-out:
+
+1. `tasksCompleted` — Count of tasks where `completedAt` falls between the session's `startTime` and `endTime`, AND the task is assigned to this user, AND status is `done`.
+2. `storyPointsCompleted` — Sum of `storyPoints` for those same tasks.
+3. `estimatedHoursSum` — Sum of `estimatedHours` for those same tasks.
+
+**Why store rather than compute on read:** The sprint estimation accuracy needs these numbers to be frozen at sprint completion. If we compute on read and the underlying task data changes, sprint metrics silently shift. Auto-enrichment at clock-out creates a stable point-in-time record.
+
+---
+
+### Decision 5: Can org sessions overlap?
+
+**Question:** If an engineer is working for Acme Corp and FreelanceCo at the same time (e.g., handling a freelance emergency during work hours), can both org sessions run simultaneously?
+
+**Resolution:** Yes. Overlapping sessions are allowed.
+
+**Rationale:** The product owner confirmed this is acceptable for the targeted use case. The engineer might clock into both orgs and the system should reflect reality. The timesheet view will show both sessions.
+
+---
+
+### Decision 6: What happens if the user never clocks out?
+
+**Question:** Engineer starts an org session in the morning, works all day, goes home without clicking "Stop." The session is left open. What happens?
+
+**Resolution:** Retroactive close on next login.
+
+**Behavior:**
+1. User logs in the next day.
+2. System detects a live session (no `endTime`) from a previous day.
+3. User is prompted: "You still had a running session for [Org Name] from [yesterday's date]. Close it?"
+4. User chooses: "Close" → session ends at current time (or user can specify time). "Ignore" → session stays live.
+5. If closed, auto-enrichment fires with whatever task data exists between start and the retroactive end time.
+
+**Edge case:** If the user was on PTO for a week and the session was from last Friday, they can retroactively close it with the correct end time.
+
+---
+
+### Decision 7: What existing schema additions are needed?
+
+**Question:** Beyond the new tables, what fixes does the current schema need based on the audit findings?
+
+**Resolution (3 additions):**
+1. **`tasks.order` column** — An integer column needed for future manual task reordering (CONTEXT.md line 101). Added now at zero cost; avoids a migration later when it becomes needed.
+2. **Unique constraint on `workspace_members`** — The current schema allows duplicate (workspaceId, userId) pairs. A unique constraint prevents double-membership bugs.
+3. **Index on `tasks.assigneeId`** — Missing index for a common query pattern (capacity calculations, assignee filtering, member profile pages).
+
+---
+
+### Decision 8: How do we scope queries by organization?
+
+**Question:** With no `organizations` table in Saha, how do we filter queries to a specific organization?
+
+**Resolution:** Organization scoping resolves through the workspace chain.
+
+**Resolution path:** Every workspace has an `organizationId` (WorkOS org ID). Every project belongs to a workspace. Every task belongs to a project. Every sprint belongs to a project. So any entity can be org-scoped by joining through its parent chain.
+
+**Middleware:** A backend middleware extracts the active org ID from the session. It validates (via WorkOS API or cached membership) that the user is a member of this org. Every downstream query inherits the org context.
+
+---
+
+## New Tables Specification
+
+### Table: `organization_settings`
+
+**Purpose:** Saha-specific configuration per organization. Keyed to WorkOS organization IDs.
 
 **Fields:**
+- `organization_id` (TEXT, UNIQUE) — WorkOS organization ID. Primary lookup key.
+- `default_sprint_length_days` (INTEGER) — Default sprint duration. Default: 14.
+- `working_hours_start` (TIME) — Org workday start. Default: 09:00.
+- `working_hours_end` (TIME) — Org workday end. Default: 17:00.
+- `working_days` (INTEGER ARRAY) — Working days. Default: [1,2,3,4,5] (Mon–Fri).
+- `timezone` (TEXT) — Org timezone. Default: 'UTC'.
+- `require_clock_in` (BOOLEAN) — Mandatory clock-in. Default: false.
+- Standard timestamps: `created_at`, `updated_at`.
 
-| Field | Type | Default | Purpose |
-|-------|------|---------|---------|
-| `organization_id` | TEXT (PK) | — | WorkOS org ID. Unique. |
-| `default_sprint_length_days` | INTEGER | 14 | PM creates sprint → auto-suggests end date. |
-| `working_hours_start` | TIME | 09:00 | Org clock-in defaults. |
-| `working_hours_end` | TIME | 17:00 | Auto-timeout logic reference. |
-| `working_days` | INTEGER[] | [1,2,3,4,5] | Mon–Fri. Sprint duration calculations. |
-| `timezone` | TEXT | UTC | Normalizes all timestamps for timesheet aggregation. |
-| `require_clock_in` | BOOLEAN | false | Mandatory org clock-in before task status changes? |
-
-**Drizzle ORM Schema:**
-
-```typescript
-export const organizationSettings = pgTable('organization_settings', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  organizationId: text('organization_id').notNull().unique(),
-  defaultSprintLengthDays: integer('default_sprint_length_days').notNull().default(14),
-  workingHoursStart: time('working_hours_start').notNull().default('09:00:00'),
-  workingHoursEnd: time('working_hours_end').notNull().default('17:00:00'),
-  workingDays: integer('working_days').array().notNull().default([1, 2, 3, 4, 5]),
-  timezone: text('timezone').notNull().default('UTC'),
-  requireClockIn: boolean('require_clock_in').notNull().default(false),
-  createdAt: timestamp('created_at').notNull().defaultNow(),
-  updatedAt: timestamp('updated_at').notNull().defaultNow(),
-})
-```
+**Row creation:** A row is created automatically when the first workspace is created for an organization. Default values are used; the org admin can change them later.
 
 ---
 
-### 2. New Table: `org_sessions`
+### Table: `org_sessions`
 
-Replaces `timeEntries`. Tracks org-level clock-in/out sessions with auto-enriched task completion data.
+**Purpose:** Replaces `timeEntries`. Tracks org-level clock-in/clock-out sessions with auto-enriched task completion data.
 
-```sql
-CREATE TABLE org_sessions (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  organization_id TEXT NOT NULL,  -- WorkOS org ID
-  start_time TIMESTAMP NOT NULL,
-  end_time TIMESTAMP,  -- NULL while session is live
-  note TEXT,
-  tasks_completed INTEGER NOT NULL DEFAULT 0,
-  story_points_completed DECIMAL NOT NULL DEFAULT 0,
-  estimated_hours_sum DECIMAL NOT NULL DEFAULT 0,
-  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMP NOT NULL DEFAULT NOW()
-);
+**User-set fields:**
+- `user_id` — Who clocked in (FK to users).
+- `organization_id` — Which org (WorkOS org ID, not an FK — WorkOS owns this).
+- `start_time` — When the user clocked in. Set on create.
+- `end_time` — When the user clocked out. NULL while session is live. Set on stop.
+- `note` — Optional user note. Free text. For context like "morning was dev work, afternoon was interviews."
 
-CREATE INDEX idx_org_sessions_user ON org_sessions(user_id);
-CREATE INDEX idx_org_sessions_org ON org_sessions(organization_id);
-CREATE INDEX idx_org_sessions_time ON org_sessions(start_time, end_time);
-CREATE INDEX idx_org_sessions_user_org_time ON org_sessions(user_id, organization_id, start_time);
-```
+**Auto-enriched fields (computed on clock-out):**
+- `tasks_completed` — Count of tasks done during this session.
+- `story_points_completed` — Sum of story points for those tasks.
+- `estimated_hours_sum` — Sum of estimated hours for those tasks.
 
-**Fields:**
+**System fields:**
+- `frozen` (BOOLEAN) — Set to true when the sprint overlapping this session is completed. Frozen sessions are immutable.
+- Standard timestamps: `created_at`, `updated_at`.
 
-| Field | Type | Source | Notes |
-|-------|------|--------|-------|
-| `id` | UUID | System | Primary key |
-| `user_id` | UUID FK → users | Auth context | Who clocked in |
-| `organization_id` | TEXT (WorkOS org ID) | Auth context | Which org |
-| `start_time` | TIMESTAMP | User action | Clock-in moment |
-| `end_time` | TIMESTAMP | User action or auto-timeout | Clock-out. NULL while live. |
-| `note` | TEXT | User (optional) | "Morning was dev work, afternoon was interviews" |
-| `tasks_completed` | INTEGER | Auto-enriched on clock-out | COUNT of tasks completed during session |
-| `story_points_completed` | DECIMAL | Auto-enriched on clock-out | SUM of storyPoints for completed tasks |
-| `estimated_hours_sum` | DECIMAL | Auto-enriched on clock-out | SUM of estimatedHours for completed tasks |
+**Enrichment logic (declarative):**
+- Only tasks where `assignee_id = user_id` AND `status = 'done'` AND `completed_at BETWEEN start_time AND end_time` are counted.
+- If the session is live (`end_time IS NULL`), enrichment values are zero.
+- If a task is completed retroactively (after the session was closed), the session is recomputed IF the session is not frozen. If frozen (sprint completed), the retroactive completion is rejected.
 
-**Auto-Enrichment Logic (on clock-out):**
-
-```sql
--- Pseudo-SQL for auto-enrichment on session end:
-UPDATE org_sessions SET
-  tasks_completed = (
-    SELECT COUNT(*) FROM tasks
-    WHERE completed_at BETWEEN start_time AND end_time
-      AND assignee_id = org_sessions.user_id
-      AND status = 'done'
-  ),
-  story_points_completed = (
-    SELECT COALESCE(SUM(story_points), 0) FROM tasks
-    WHERE completed_at BETWEEN start_time AND end_time
-      AND assignee_id = org_sessions.user_id
-      AND status = 'done'
-  ),
-  estimated_hours_sum = (
-    SELECT COALESCE(SUM(estimated_hours), 0) FROM tasks
-    WHERE completed_at BETWEEN start_time AND end_time
-      AND assignee_id = org_sessions.user_id
-      AND status = 'done'
-  )
-WHERE id = :session_id;
-```
-
-**Drizzle ORM Schema:**
-
-```typescript
-export const orgSessions = pgTable('org_sessions', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  organizationId: text('organization_id').notNull(),
-  startTime: timestamp('start_time').notNull(),
-  endTime: timestamp('end_time'),
-  note: text('note'),
-  tasksCompleted: integer('tasks_completed').notNull().default(0),
-  storyPointsCompleted: decimal('story_points_completed').notNull().default('0'),
-  estimatedHoursSum: decimal('estimated_hours_sum').notNull().default('0'),
-  createdAt: timestamp('created_at').notNull().defaultNow(),
-  updatedAt: timestamp('updated_at').notNull().defaultNow(),
-}, (table) => ({
-  userIdx: index('idx_org_sessions_user').on(table.userId),
-  orgIdx: index('idx_org_sessions_org').on(table.organizationId),
-  timeIdx: index('idx_org_sessions_time').on(table.startTime, table.endTime),
-  userOrgTimeIdx: index('idx_org_sessions_user_org_time').on(table.userId, table.organizationId, table.startTime),
-}))
-```
+**Indexes:**
+- By user, for "my timesheet" queries.
+- By organization, for cross-user aggregation.
+- By time range, for sprint-scoped velocity computation.
+- Composite: user + org + time, for the most common query pattern.
 
 ---
 
-### 3. Drop Table: `timeEntries`
+### Dropped Table: `timeEntries`
 
-The existing `timeEntries` table and all associated router endpoints are removed.
+**What happens to existing data:** Dropped entirely. There is no migration of existing timeEntries data into org_sessions. The old model was per-task; the new model is org-level. Direct data migration doesn't make semantic sense. The old data is historical and can be queried from database backups if needed.
 
-```sql
-DROP TABLE IF EXISTS time_entries CASCADE;
-```
+**What happens to endpoints:** All `timeEntry.*` tRPC procedures are removed.
 
-**Removed Router Endpoints:**
-- `timeEntry.list`
-- `timeEntry.running`
-- `timeEntry.start`
-- `timeEntry.stop`
-- `timeEntry.create`
-- `timeEntry.update`
-- `timeEntry.delete`
-
-**Removed Frontend Components:**
-- `TimeTracker.svelte` (replaced by org clock-in component)
-- `TimeEntryForm.svelte` (unused component, no longer needed)
+**What happens to frontend:** `TimeTracker.svelte` is removed. `TimeEntryForm.svelte` is removed.
 
 ---
 
-### 4. Schema Additions to Existing Tables
-
-#### 4.1 `tasks` Table — Add `order` Column
-
-Per CONTEXT.md line 101: "keep `order` column for future manual reorder."
-
-```sql
-ALTER TABLE tasks ADD COLUMN IF NOT EXISTS "order" INTEGER NOT NULL DEFAULT 0;
-CREATE INDEX idx_tasks_order ON tasks(project_id, status, "order");
-```
-
-#### 4.2 `workspace_members` Table — Add Unique Constraint
-
-```sql
-ALTER TABLE workspace_members
-  ADD CONSTRAINT unique_workspace_member UNIQUE (workspace_id, user_id);
-```
-
-#### 4.3 `tasks` Table — Add Index on `assigneeId`
-
-```sql
-CREATE INDEX IF NOT EXISTS idx_tasks_assignee ON tasks(assignee_id);
-```
-
----
-
-## Migration Plan
+## Migration Strategy
 
 ### Migration File: `0003_org_sessions_and_settings.sql`
 
-```sql
--- Step 1: Create new tables
-CREATE TABLE organization_settings (...);
-CREATE TABLE org_sessions (...);
+**Order of operations:**
+1. Create `organization_settings` table (no dependencies).
+2. Create `org_sessions` table (depends on users).
+3. Add `order` column to `tasks` table.
+4. Add indexes on new tables.
+5. Add indexes on existing tables (assigneeId).
+6. Add unique constraint on `workspace_members`.
+7. Drop `timeEntries` table.
 
--- Step 2: Add columns to existing tables
-ALTER TABLE tasks ADD COLUMN IF NOT EXISTS "order" INTEGER NOT NULL DEFAULT 0;
-
--- Step 3: Add indexes
-CREATE INDEX idx_org_settings_org_id ON organization_settings(organization_id);
-CREATE INDEX idx_org_sessions_user ON org_sessions(user_id);
-CREATE INDEX idx_org_sessions_org ON org_sessions(organization_id);
-CREATE INDEX idx_org_sessions_time ON org_sessions(start_time, end_time);
-CREATE INDEX idx_org_sessions_user_org_time ON org_sessions(user_id, organization_id, start_time);
-CREATE INDEX idx_tasks_order ON tasks(project_id, status, "order");
-CREATE INDEX idx_tasks_assignee ON tasks(assignee_id);
-
--- Step 4: Add unique constraint
-ALTER TABLE workspace_members
-  ADD CONSTRAINT unique_workspace_member UNIQUE (workspace_id, user_id);
-
--- Step 5: Drop old table
-DROP TABLE IF EXISTS time_entries CASCADE;
-```
+**Rollback plan:** Each step is reversible in reverse order. If migration fails mid-way, the database is in a consistent state (only additive changes before the drop).
 
 ---
 
 ## WorkOS Integration
 
-### Organization Resolution
+### Active Organization State
 
-WorkOS owns org identity. Saha resolves `organizationId` from the authenticated user's active WorkOS organization context.
+**Frontend store:** A Svelte writable store holds the currently active organization (`id`, `name`, `slug`). Persisted to localStorage for session recovery across page refreshes.
 
-**Auth Flow:**
-1. User authenticates via WorkOS → receives access token + active org ID
-2. Saha stores the active org ID in the session cookie
-3. Every API request includes the org ID in the session
-4. Middleware validates user is a member of the org (via WorkOS API or cached membership)
+**Org switcher component:** A dropdown in the topbar lists all organizations the user belongs to (fetched from WorkOS Organizations API). Selecting an org sets the active org store and navigates to `/:orgSlug`.
 
-### Active-Org State (Frontend)
+### Backend Middleware
 
-```typescript
-// /packages/web/src/lib/stores/active-org.svelte.ts
-import { writable } from 'svelte/store'
+**Org-scoped middleware:**
+1. Extracts active org ID from the session.
+2. Validates (via WorkOS API or cached membership data) that the authenticated user is a member of this org.
+3. If not a member: reject with FORBIDDEN.
+4. If no active org: reject with BAD_REQUEST for org-scoped operations.
+5. Passes `organizationId` to all downstream resolvers.
 
-export const activeOrg = writable<{
-  id: string        // WorkOS org ID
-  name: string      // Org display name
-  slug: string      // URL-friendly slug
-} | null>(null)
-
-export function setActiveOrg(org: { id: string; name: string; slug: string }) {
-  activeOrg.set(org)
-  // Persist to localStorage for session recovery
-  localStorage.setItem('activeOrg', JSON.stringify(org))
-}
-
-export function clearActiveOrg() {
-  activeOrg.set(null)
-  localStorage.removeItem('activeOrg')
-}
-```
-
-### Org-Scoped Middleware (Backend)
-
-```typescript
-// /packages/api/src/middleware/org-scope.ts
-import { middleware } from '../trpc'
-import { workspaces } from '../db/schema'
-import { eq } from 'drizzle-orm'
-import { db } from '../db/connection'
-
-export const orgScopedMiddleware = middleware(async ({ ctx, next }) => {
-  const { user, activeOrgId } = ctx
-
-  if (!activeOrgId) {
-    throw new TRPCError({
-      code: 'BAD_REQUEST',
-      message: 'Active organization is required',
-    })
-  }
-
-  // Verify user is member of this org (via WorkOS API or cached)
-  const isMember = await verifyOrgMembership(user.id, activeOrgId)
-  if (!isMember) {
-    throw new TRPCError({
-      code: 'FORBIDDEN',
-      message: 'User is not a member of this organization',
-    })
-  }
-
-  return next({
-    ctx: {
-      ...ctx,
-      organizationId: activeOrgId,
-    },
-  })
-})
-```
+**Org resolution for existing entities:** When a query receives a `workspaceId` or `projectId`, the middleware joins through the chain to verify the workspace belongs to the active org. Cross-org access is blocked at the middleware level.
 
 ---
 
-## Cross-Workspace Aggregation Queries
+## Routes Affected
 
-All queries that aggregate across workspaces must filter by `organizationId`.
+**Routes that change:**
+- Old `/home` → removed. Replaced by `/` (My Work) and `/:orgSlug` (per-org Home) in L1.
+- Old `/projects` → removed. Replaced by `/:orgSlug/projects` in L1.
+- Old `/velocity` → removed. Replaced by `/:orgSlug/velocity` in L1.
+- Old `/project/:id/kanban` → removed. Replaced by `/:orgSlug/project/:id/kanban` in L1.
+- Old `/project/:id/sprints` → removed. Replaced by `/:orgSlug/project/:id/sprints` in L1.
+- Old `/workspace/:wid/member/:uid` → removed. Replaced by `/:orgSlug/people/:userId` in L5.
 
-**Example: Get all workspaces for active org:**
-
-```typescript
-const workspaces = await db
-  .select()
-  .from(workspacesTable)
-  .where(eq(workspacesTable.organizationId, ctx.organizationId))
-```
-
-**Example: Get all tasks across all org workspaces:**
-
-```typescript
-const tasks = await db
-  .select()
-  .from(tasks)
-  .innerJoin(projects, eq(tasks.projectId, projects.id))
-  .innerJoin(workspaces, eq(projects.workspaceId, workspaces.id))
-  .where(eq(workspaces.organizationId, ctx.organizationId))
-```
-
----
-
-## Frontend Architecture Changes
-
-### Route Structure (Org-Prefixed)
-
-```
-/                              → My Work (unified, all orgs)
-/:orgSlug                      → Per-org Home
-/:orgSlug/projects             → Org projects list
-/:orgSlug/project/:id/kanban   → Project Kanban
-/:orgSlug/project/:id/sprints  → Sprint board
-/:orgSlug/project/:id/sprints/backlog → Backlog
-/:orgSlug/velocity             → Org velocity page
-/:orgSlug/settings             → Org settings (future)
-```
-
-### Org Switcher Component
-
-```svelte
-<!-- /packages/web/src/lib/components/OrgSwitcher.svelte -->
-<script lang="ts">
-  import { activeOrg, setActiveOrg } from '$lib/stores/active-org.svelte'
-  
-  // Fetch user's organizations from WorkOS
-  // Render dropdown with org list
-  // On select: setActiveOrg(selectedOrg)
-  // Navigate to /:orgSlug
-</script>
-```
-
-### QuickAdd Org Targeting
-
-QuickAdd targets the active org's inbox project by default. If no org is active, prompts user to select one.
-
----
-
-## Session Management
-
-### Org Session Lifecycle
-
-| Event | Action |
-|-------|--------|
-| Clock-in | Create `org_sessions` row with `start_time`, `end_time = NULL` |
-| Clock-out | Set `end_time`, trigger auto-enrichment |
-| Page refresh | Resume live session if `end_time IS NULL` |
-| Forgotten clock-out | Retroactive close on next login |
-| Overlapping sessions | Allowed. Multiple live sessions per user. |
-
-### Auto-Timeout Logic
-
-If a session has been live for more than `working_hours_end - working_hours_start` hours, prompt user to close it. Configurable via `organization_settings`.
+**New routes created in L0 (empty shells for L1+):**
+- `/:orgSlug` — Per-org Home page (built in L1).
+- `/:orgSlug/projects` — Org projects list (built in L1).
+- `/:orgSlug/project/:id/kanban` — Project Kanban (rebuilt in L1).
+- `/:orgSlug/project/:id/sprints` — Sprint board (built in L2).
+- `/:orgSlug/velocity` — Org velocity page (built in L3).
+- `/:orgSlug/overview` — Executive dashboard (built in L5).
+- `/:orgSlug/people` — Employee directory (built in L5).
 
 ---
 
 ## Testing Requirements
 
 ### Schema Tests
-
-- [ ] `organization_settings` table exists with all columns
-- [ ] `org_sessions` table exists with all columns
-- [ ] `time_entries` table does not exist
-- [ ] `tasks.order` column exists
-- [ ] `workspace_members` unique constraint exists
-- [ ] All indexes created
+- All new tables exist with correct columns.
+- All new indexes exist.
+- `timeEntries` table does not exist.
+- `order` column exists on tasks.
+- Unique constraint on workspace_members.
+- Migration runs cleanly on existing database.
 
 ### Integration Tests
-
-- [ ] Org-scoped middleware rejects non-members
-- [ ] Cross-workspace queries filter by org correctly
-- [ ] Auto-enrichment computes correct values on clock-out
-- [ ] Retroactive session close works
-- [ ] Overlapping sessions allowed
-
-### Migration Tests
-
-- [ ] Migration runs without errors on existing database
-- [ ] Existing workspace data backfilled correctly
-- [ ] No data loss during migration
+- Org-scoped middleware rejects non-members.
+- Org-scoped middleware rejects missing org.
+- Cross-workspace queries filter by org correctly.
+- Auto-enrichment computes correct values on clock-out.
+- Overlapping sessions allowed.
+- Retroactive session close works.
+- Frozen sessions reject recomputation.
 
 ---
 
 ## Dependencies
 
-- WorkOS SDK (already integrated)
-- Drizzle ORM (already in use)
-- PostgreSQL (already in use)
+- WorkOS SDK (already integrated in the app).
+- Drizzle ORM (already in use).
+- PostgreSQL (already in use).
+- No new external dependencies.
 
 ---
 
 ## Deliverables
 
-1. ✅ Migration file: `0003_org_sessions_and_settings.sql`
-2. ✅ Drizzle schema updates
-3. ✅ Active-org store (frontend)
-4. ✅ Org-scoped middleware (backend)
-5. ✅ Route structure updated (org-prefixed)
-6. ✅ `timeEntries` table and endpoints removed
-7. ✅ `org_sessions` table and endpoints created
-8. ✅ `organization_settings` table created
+1. Database migration creating `organization_settings` and `org_sessions`.
+2. Migration adding `order` column, unique constraint, and indexes to existing tables.
+3. Migration dropping `timeEntries` table.
+4. Active-org Svelte store (frontend).
+5. Org-scoped backend middleware.
+6. WorkOS org membership verification logic.
+7. Route structure prepared (org-prefixed, empty pages for L1+ to fill).
+8. Old routes, endpoints, and frontend components removed.
 
 ---
 
-## Next Level
+## What L0 Does NOT Include
 
-L0 is the foundation. L1 (Multi-Org Core) depends on L0 being complete. L1 builds the user-visible org switching, unified views, and clock-in/out experience on top of this infrastructure.
+- No user-visible features. All pages at new routes are empty shells.
+- No org switcher UI (that's L1).
+- No clock-in/out UI (that's L1).
+- No sprint creation/completion UI (that's L2).
+- No data migration from timeEntries to org_sessions. Old time data is discarded.
+
+---
+
+## Edge Cases Catalog
+
+| Edge Case | Resolution |
+|-----------|------------|
+| User belongs to 0 organizations after signup | Personal workspace exists without org binding. User can use personal space. |
+| User belongs to 10+ organizations | Org switcher dropdown scrolls. No practical limit. |
+| WorkOS org is deleted externally | Saha's `organization_settings` row becomes orphaned. Future: cleanup job. For now: manual. |
+| Two users in same org with different timezones | `organization_settings.timezone` is the org default. Individual user timezone is a future feature. |
+| Migration fails mid-way | All steps before the failure are reversible. Database is consistent. |
+| Existing `review` tasks | Migrated to `in_progress` in L2 migration. No action in L0. |
