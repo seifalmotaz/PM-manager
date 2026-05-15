@@ -12,7 +12,7 @@
       }
       try {
         await handleCallback(code)
-        goto('/home')
+        goto('/')
       } catch {
         goto('/auth/login?error=auth_failed')
       }

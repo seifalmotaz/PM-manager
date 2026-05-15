@@ -59,11 +59,7 @@
     p3: '#9ca3af',
   }
 
-  const navigationItems = [
-    { id: 'nav-home', title: '/home', label: 'Go to Home', icon: Home, action: () => goto('/home') },
-    { id: 'nav-velocity', title: '/velocity', label: 'Go to Velocity', icon: BarChart2, action: () => goto('/velocity') },
-    { id: 'nav-projects', title: '/projects', label: 'Go to Projects', icon: Layers, action: () => goto('/projects') },
-  ]
+  const navigationItems = []
 
   let flatResults = $derived.by(() => {
     const items: Array<{
@@ -75,22 +71,6 @@
       subtitle?: string
       priorityColor?: string
     }> = []
-
-    // Navigation items
-    const navFiltered = navigationItems.filter(n => 
-      n.title.toLowerCase().includes(query.toLowerCase()) ||
-      n.label.toLowerCase().includes(query.toLowerCase())
-    )
-    for (const nav of navFiltered) {
-      items.push({
-        id: nav.id,
-        title: nav.title,
-        type: 'navigation',
-        icon: nav.icon,
-        action: nav.action,
-        subtitle: nav.label,
-      })
-    }
 
     // Task results
     for (const task of searchResults.tasks) {

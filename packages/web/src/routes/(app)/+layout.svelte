@@ -15,7 +15,6 @@
   } from 'lucide-svelte'
   import { clsx } from 'clsx'
   import CommandPalette from '$lib/components/CommandPalette.svelte'
-  import TimeTracker from '$lib/components/TimeTracker.svelte'
   import QuickAddModal from '$lib/components/QuickAddModal.svelte'
   import WorkspaceFilter from '$lib/components/WorkspaceFilter.svelte'
   import DeadlineBadge from '$lib/components/DeadlineBadge.svelte'
@@ -60,11 +59,7 @@
     fetchOverdueCount()
   }
 
-  const navItems = [
-    { label: 'Home', icon: Home, href: '/home' },
-    { label: 'Velocity', icon: BarChart2, href: '/velocity' },
-    { label: 'Projects', icon: Layers, href: '/projects' },
-  ]
+  
 </script>
 
 <div class={clsx('app-shell', isSidebarCollapsed && 'sidebar-collapsed', isDetailPanelOpen && 'detail-open')}>
@@ -85,19 +80,6 @@
     </div>
 
     <nav class="sidebar-nav">
-      {#each navItems as item}
-        <a 
-          href={item.href} 
-          class="nav-link" 
-          aria-current={$page.url.pathname === item.href ? 'page' : undefined}
-          title={isSidebarCollapsed ? item.label : ''}
-        >
-          <item.icon size={20} />
-          {#if !isSidebarCollapsed}
-            <span class="nav-label">{item.label}</span>
-          {/if}
-        </a>
-      {/each}
     </nav>
 
     <div class="sidebar-footer">
@@ -126,7 +108,6 @@
 
     <div class="topbar-right">
       <DeadlineBadge />
-      <TimeTracker />
       <NotificationBell />
       <button class="quick-add-btn" onclick={() => isQuickAddOpen = true}>
         <Plus size={20} />

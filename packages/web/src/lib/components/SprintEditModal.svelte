@@ -2,8 +2,8 @@
   import { X } from 'lucide-svelte'
   import { trpc } from '$lib/trpc'
   import SprintDeleteDialog from './SprintDeleteDialog.svelte'
-  // Import Sprint type from the API package via relative path
-  import type { Sprint } from 'api/modules/sprint/sprint.type'
+  // Import Sprint type from stores
+  import type { Sprint } from '$lib/stores/sprint'
 
   let {
     isOpen = $bindable(false),

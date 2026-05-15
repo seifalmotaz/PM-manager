@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { TaskSummary } from '$lib/stores/tasks'
-  import type { Sprint } from 'api/modules/sprint/sprint.type'
+  import type { Sprint } from '$lib/stores/sprint'
   import SprintTaskCard from './SprintTaskCard.svelte'
   import { clsx } from 'clsx'
 

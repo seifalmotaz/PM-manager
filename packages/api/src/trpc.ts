@@ -18,6 +18,7 @@ export async function createContext(opts: { req: Request; resHeaders: Headers })
   const sessionToken = parseSessionCookie(cookieHeader)
 
   let user: typeof users.$inferSelect | null = null
+  let organizationId: string | null = null // L0 stub - always null
 
   if (sessionToken) {
     try {
@@ -41,6 +42,7 @@ export async function createContext(opts: { req: Request; resHeaders: Headers })
     db,
     req: opts.req,
     resHeaders: opts.resHeaders,
+    organizationId, // L0 stub - L1 will populate from WorkOS session
   }
 }
 

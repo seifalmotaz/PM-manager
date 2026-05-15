@@ -8,10 +8,11 @@ import { velocityRouter } from './modules/velocity/velocity.router'
 import { capacityRouter } from './modules/sprint/capacity.router'
 import { commentRouter } from './modules/comment/comment.router'
 import { checklistRouter } from './modules/checklist/checklist.router'
-import { timeEntryRouter } from './modules/time-entry/time-entry.router'
 import { auditRouter } from './shared/audit/audit.router'
 import { notificationRouter } from './modules/notification/notification.router'
 import { forecastRouter } from './modules/forecast/forecast.router'
+import { organizationRouter } from './modules/organization/organization.router'
+import { orgSessionRouter } from './modules/org-session/org-session.router'
 
 export const appRouter = router({
   auth: authRouter,
@@ -23,10 +24,11 @@ export const appRouter = router({
   capacity: capacityRouter,
   comment: commentRouter,
   checklist: checklistRouter,
-  timeEntry: timeEntryRouter,
   audit: auditRouter,
   notification: notificationRouter,
   forecast: forecastRouter,
+  organization: organizationRouter,
+  orgSession: orgSessionRouter,
 })
 
 export type AppRouter = typeof appRouter
