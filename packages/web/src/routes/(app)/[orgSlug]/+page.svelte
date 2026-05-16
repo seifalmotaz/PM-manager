@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte'
-  import { getOrganization } from '$lib/stores/organization.svelte'
+  import { getOrganization, loadOrganizations } from '$lib/stores/organization.svelte'
   import { tasks, isLoading, selectedTask, fetchOverdueCount } from '$lib/stores/tasks'
   import { showToast } from '$lib/stores/toast.svelte'
   import KanbanBoard from '$lib/components/KanbanBoard.svelte'
@@ -22,16 +22,21 @@
   let isPageLoading = $state(true)
 
   onMount(async () => {
-    const orgs = getOrganization().organizations
+    // Load orgs if not present (page refresh scenario)
+    let orgs = getOrganization().organizations
+    if (orgs.length === 0) {
+      orgs = await loadOrganizations()
+    }
+
     const org = orgs.find(o => o.slug === orgSlug)
     if (org) {
       orgId = org.id
       orgName = org.name
       await fetchOrgTasks(org.id)
     } else {
-      orgId = orgSlug
-      orgName = orgSlug
-      await fetchOrgTasks(orgSlug)
+      // Org not found — show error instead of using slug as ID
+      orgName = 'Unknown Organization'
+      tasks.set([])
     }
     isPageLoading = false
     fetchOverdueCount()
@@ -53,7 +58,7 @@
 
   async function handleStatusChange(taskId: string, newStatus: string) {
     try {
-      await trpc.task.changeStatus.mutate({ id: taskId, status: newStatus as 'todo' | 'in_progress' | 'review' | 'done' })
+      await trpc.task.changeStatus.mutate({ id: taskId, status: newStatus as 'todo' | 'in_progress' | 'done' })
       if (orgId) await fetchOrgTasks(orgId)
     } catch (err) {
       console.error('Failed to change task status:', err)
@@ -78,7 +83,6 @@
   const columns = [
     { id: 'todo', label: 'To Do' },
     { id: 'in_progress', label: 'In Progress' },
-    { id: 'review', label: 'Review' },
     { id: 'done', label: 'Done' },
   ]
 </script>

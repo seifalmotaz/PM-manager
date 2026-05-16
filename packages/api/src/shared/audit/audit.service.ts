@@ -5,7 +5,7 @@ import { auditLogs } from '../../db/schema'
 const AuditEntrySchema = z.object({
   entityType: z.enum(['task', 'project', 'sprint', 'workspace', 'comment']),
   entityId: z.string().uuid(),
-  action: z.enum(['created', 'updated', 'deleted', 'status_changed']),
+  action: z.enum(['created', 'updated', 'deleted', 'status_changed', 'completed']),
   field: z.string().optional(),
   oldValue: z.string().optional(),
   newValue: z.string().optional(),

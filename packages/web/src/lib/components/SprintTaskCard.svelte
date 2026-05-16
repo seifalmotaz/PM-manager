@@ -31,7 +31,6 @@
     const colors: Record<string, string> = {
       'todo': '#808080',
       'in_progress': '#246fe0',
-      'review': '#a855f7',
       'done': '#22c55e',
     }
     return colors[status?.toLowerCase()] ?? '#808080'
@@ -41,7 +40,6 @@
     const labels: Record<string, string> = {
       'todo': 'To Do',
       'in_progress': 'In Progress',
-      'review': 'Review',
       'done': 'Done',
     }
     return labels[status?.toLowerCase()] ?? status

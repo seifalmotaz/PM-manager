@@ -18,10 +18,10 @@
     const grouped: Record<string, TaskSummary[]> = {
       todo: [],
       in_progress: [],
-      review: [],
       done: [],
     }
     for (const task of tasks) {
+      // Only group valid statuses; ignore any legacy 'review' tasks
       if (grouped[task.status]) {
         grouped[task.status].push(task)
       }
@@ -32,7 +32,6 @@
   const columns = [
     { id: 'todo', label: 'To Do' },
     { id: 'in_progress', label: 'In Progress' },
-    { id: 'review', label: 'Review' },
     { id: 'done', label: 'Done' },
   ]
 </script>

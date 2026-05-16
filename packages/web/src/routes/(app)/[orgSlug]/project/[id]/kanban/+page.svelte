@@ -16,7 +16,6 @@
 
   let project = $state<any>(null)
   let tasks = $state<TaskSummary[]>([])
-  let isLoading = $state(true)
   let viewMode = $state<'kanban' | 'list'>('kanban')
   let isPageLoading = $state(true)
 
@@ -58,7 +57,6 @@
   const columns = [
     { id: 'todo', label: 'To Do' },
     { id: 'in_progress', label: 'In Progress' },
-    { id: 'review', label: 'Review' },
     { id: 'done', label: 'Done' },
   ]
 </script>
@@ -104,7 +102,7 @@
   </div>
 
   <div class="page-content">
-    {#if isPageLoading || isLoading}
+    {#if isPageLoading}
       <div class="status-container">
         <div class="spinner"></div>
         <p>Loading project...</p>

@@ -1,9 +1,11 @@
+export type TaskStatus = 'todo' | 'in_progress' | 'done'
+
 export interface TaskSummary {
   id: string
   projectId: string
   title: string
   description?: string | null
-  status: 'todo' | 'in_progress' | 'review' | 'done'
+  status: TaskStatus
   priority?: 'p0' | 'p1' | 'p2' | 'p3' | null
   storyPoints?: number | null
   estimatedHours?: number | null

@@ -103,7 +103,6 @@
   const columns = [
     { id: 'todo', label: 'To Do' },
     { id: 'in_progress', label: 'In Progress' },
-    { id: 'review', label: 'Review' },
     { id: 'done', label: 'Done' },
   ]
 </script>

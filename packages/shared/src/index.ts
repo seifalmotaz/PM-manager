@@ -43,7 +43,18 @@ export interface Project {
   updatedAt: Date
 }
 
-export type TaskStatus = 'todo' | 'in_progress' | 'review' | 'done'
+export type TaskStatus = 'todo' | 'in_progress' | 'done'
+
+// Valid status transitions (adjacent only)
+export const VALID_TRANSITIONS: Record<TaskStatus, TaskStatus[]> = {
+  'todo': ['in_progress'],
+  'in_progress': ['done', 'todo'],
+  'done': ['in_progress']
+}
+
+export function isValidTransition(from: TaskStatus, to: TaskStatus): boolean {
+  return VALID_TRANSITIONS[from]?.includes(to) ?? false
+}
 export type Priority = 'p0' | 'p1' | 'p2' | 'p3'
 
 export interface Task {
