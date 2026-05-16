@@ -94,4 +94,37 @@ const custom = protectedProcedure
     })
   })
 
-export const velocityRouter = router({ live, snapshot, custom })
+const chart = protectedProcedure
+  .input(
+    z.object({
+      projectId: z.string().uuid().optional(),
+      limit: z.number().default(8),
+    }),
+  )
+  .query(async ({ input, ctx }) => {
+    // Velocity is project-scoped only. If user can access the project, they can see velocity.
+    // Organization-level velocity can be achieved by querying all projects in an org.
+
+    return velocityService.getChartData({
+      projectId: input.projectId,
+      limit: input.limit,
+    })
+  })
+
+const personal = protectedProcedure
+  .input(
+    z.object({
+      projectId: z.string().uuid().optional(),
+      userId: z.string().uuid().optional(),
+    }),
+  )
+  .query(async ({ input, ctx }) => {
+    const userId = input.userId ?? ctx.user.id
+
+    return velocityService.getPersonalVelocity({
+      userId,
+      projectId: input.projectId,
+    })
+  })
+
+export const velocityRouter = router({ live, snapshot, custom, chart, personal })

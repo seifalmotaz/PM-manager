@@ -13,8 +13,10 @@
     "@sveltejs/adapter-auto": "^7.0.1",
     "@sveltejs/kit": "^2.20.0",
     "@trpc/client": "^11.0.0",
+    "chart.js": "^4.5.1",
     "dotenv": "^17.4.2",
-    "svelte": "^5.0.0"
+    "svelte": "^5.0.0",
+    "svelte-chartjs": "^4.0.1"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^5.0.0",

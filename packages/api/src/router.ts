@@ -13,6 +13,7 @@ import { notificationRouter } from './modules/notification/notification.router'
 import { forecastRouter } from './modules/forecast/forecast.router'
 import { organizationRouter } from './modules/organization/organization.router'
 import { orgSessionRouter } from './modules/org-session/org-session.router'
+import { timesheetRouter } from './modules/timesheet/timesheet.router'
 import { repairRouter } from './modules/repair/repair.router'
 
 export const appRouter = router({
@@ -30,6 +31,7 @@ export const appRouter = router({
   forecast: forecastRouter,
   organization: organizationRouter,
   orgSession: orgSessionRouter,
+  timesheet: timesheetRouter,
   repair: repairRouter,
 })
 

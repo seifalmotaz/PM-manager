@@ -49,3 +49,29 @@ We work across contexts. We manage capacity, not just cards. We need velocity, n
 Saha bridges the gap — built by someone who lives in it, for people who live in it too.
 
 The AI-native layer (MCP) comes next. But first: a PM tool that actually fits the modern worker.
+
+## Features
+
+### Time Tracking & Visibility (L3)
+
+- **Timesheet** — Weekly view of org sessions across organizations
+  - Unified timesheet showing all orgs
+  - Org-scoped timesheet for specific organization
+  - Week navigation (previous/next)
+  - Live session tracking with elapsed time
+  - Auto-created session indicator
+  - Frozen session indicator (sprint completed)
+
+- **Velocity Chart** — Sprint-by-sprint planned vs completed visualization
+  - Bar chart with last 8 completed sprints
+  - Click to navigate to sprint board
+  - Planned SP (outline) vs Completed SP (filled)
+
+- **Estimation Accuracy Metrics** — Team performance insights
+  - Throughput accuracy (completed/planned ratio)
+  - Time efficiency (estimated vs actual hours)
+  - Accuracy trend per sprint
+
+- **Personal Velocity** — Individual contribution breakdown
+  - Per-sprint tasks, SP, team total, share percentage
+  - Collapsible section on velocity page
