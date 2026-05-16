@@ -1,6 +1,6 @@
 import { WorkOS } from '@workos-inc/node'
 import { db } from '../../db/connection'
-import { users, workspaces, workspaceMembers, organizationSettings } from '../../db/schema'
+import { users, workspaces, workspaceMembers, organizationSettings, projects } from '../../db/schema'
 import { eq } from 'drizzle-orm'
 
 const workos = new WorkOS(process.env.WORKOS_API_KEY!, {
@@ -47,6 +47,13 @@ async function exchangeCode(code: string) {
     user = updated
   } else {
     isNew = true
+
+    // Create WorkOS personal org first (external API call, outside transaction)
+    const personalOrg = await workos.organizations.createOrganization({
+      name: `${workosUser.firstName ?? ''} ${workosUser.lastName ?? ''}`.trim() + "'s Personal",
+    })
+
+    // DB transaction for user, workspace, and settings
     user = await db.transaction(async (tx) => {
       const [newUser] = await tx
         .insert(users)
@@ -57,7 +64,7 @@ async function exchangeCode(code: string) {
         })
         .returning()
 
-      // Auto-create personal workspace
+      // Auto-create personal workspace with org link
       const [personalWorkspace] = await tx
         .insert(workspaces)
         .values({
@@ -65,8 +72,14 @@ async function exchangeCode(code: string) {
           slug: `${newUser.id}-personal`,
           type: 'personal',
           createdBy: newUser.id,
+          organizationId: personalOrg.id,
         })
         .returning()
+
+      // Create default organization settings
+      await tx.insert(organizationSettings).values({
+        organizationId: personalOrg.id,
+      })
 
       // Add user as owner member
       await tx.insert(workspaceMembers).values({
@@ -75,7 +88,22 @@ async function exchangeCode(code: string) {
         role: 'owner',
       })
 
+      // Create default Inbox project
+      await tx.insert(projects).values({
+        workspaceId: personalWorkspace.id,
+        name: 'Inbox',
+        description: 'Default inbox for quick tasks',
+        color: '#6366f1',
+        isInbox: true,
+      })
+
       return newUser
+    })
+
+    // Add user to WorkOS organization membership (external API call, after transaction)
+    await workos.userManagement.createOrganizationMembership({
+      userId: workosUser.id,
+      organizationId: personalOrg.id,
     })
   }
 

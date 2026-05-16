@@ -18,12 +18,14 @@
     locked,
     onDrop,
     onSprintClick,
+    onSprintComplete,
   }: {
     sprint: Sprint
     tasks: TaskSummary[]
     locked: boolean
     onDrop: (taskId: string, targetSprintId: string) => void
     onSprintClick: () => void
+    onSprintComplete?: () => void
   } = $props()
 
   let dragState: DragState = $state({
@@ -140,6 +142,15 @@
       <span class="date-range">{formatDateRange(sprint.startDate, sprint.endDate)}</span>
       <span class="task-count">{tasks.length} task(s)</span>
     </div>
+    {#if onSprintComplete && sprint.status !== 'completed'}
+      <button
+        class="complete-btn"
+        onclick={(e) => { e.stopPropagation(); onSprintComplete?.() }}
+        title="Complete sprint"
+      >
+        ✓
+      </button>
+    {/if}
   </div>
 
   <div class="column-body">
@@ -185,6 +196,7 @@
   }
 
   .column-header {
+    position: relative;
     padding: 0.75rem 0.75rem 0.5rem;
     cursor: pointer;
     border-bottom: 1px solid var(--border-main);
@@ -234,6 +246,34 @@
   .task-count {
     font-size: 0.6875rem;
     color: var(--text-muted);
+  }
+
+  .complete-btn {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    background: var(--bg-surface-hover);
+    border: 1px solid var(--border-main);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.15s, color 0.15s;
+  }
+
+  .column-header:hover .complete-btn {
+    opacity: 1;
+  }
+
+  .complete-btn:hover {
+    color: var(--text-main);
+    background: var(--bg-surface);
   }
 
   .column-body {

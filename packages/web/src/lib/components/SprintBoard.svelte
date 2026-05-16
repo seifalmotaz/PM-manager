@@ -9,10 +9,12 @@
     sprints,
     tasks,
     onSprintChange,
+    onSprintCompleteClick,
   }: {
     sprints: Sprint[]
     tasks: TaskSummary[]
     onSprintChange: (taskId: string, newSprintId: string) => Promise<void>
+    onSprintCompleteClick?: (sprint: Sprint) => void
   } = $props()
 
   let activeSprints = $derived(sprints.filter(s => s.status !== 'completed'))
@@ -58,6 +60,7 @@
           locked={isSprintLocked(sprint)}
           onDrop={(taskId, targetSprintId) => handleDrop(taskId, targetSprintId)}
           onSprintClick={() => handleSprintClick(sprint)}
+          onSprintComplete={onSprintCompleteClick ? () => onSprintCompleteClick(sprint) : undefined}
         />
       {/each}
 

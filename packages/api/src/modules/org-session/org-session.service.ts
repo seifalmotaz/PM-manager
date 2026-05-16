@@ -188,6 +188,90 @@ async function retroactivelyCloseSession(
   return updated
 }
 
+async function enrichSession(sessionId: string): Promise<void> {
+  const [session] = await db
+    .select()
+    .from(orgSessions)
+    .where(eq(orgSessions.id, sessionId))
+    .limit(1)
+
+  if (!session) return
+
+  const endTime = session.endTime ?? new Date()
+
+  const enriched = await db
+    .select({
+      count: sql<number>`COUNT(*)::int`,
+      totalSp: sql<string | null>`COALESCE(SUM(${tasks.storyPoints}::numeric), '0')`,
+      totalHours: sql<string | null>`COALESCE(SUM(${tasks.estimatedHours}::numeric), '0')`,
+    })
+    .from(tasks)
+    .where(
+      and(
+        eq(tasks.assigneeId, session.userId),
+        eq(tasks.status, 'done'),
+        gte(tasks.completedAt, session.startTime),
+        lte(tasks.completedAt, endTime),
+      ),
+    )
+
+  await db
+    .update(orgSessions)
+    .set({
+      tasksCompleted: enriched[0]?.count ?? 0,
+      storyPointsCompleted: enriched[0]?.totalSp ?? '0',
+      estimatedHoursSum: enriched[0]?.totalHours ?? '0',
+    })
+    .where(eq(orgSessions.id, sessionId))
+}
+
+async function getSessionById(sessionId: string) {
+  const [session] = await db
+    .select()
+    .from(orgSessions)
+    .where(eq(orgSessions.id, sessionId))
+    .limit(1)
+
+  return session || null
+}
+
+async function reenrichSession(sessionId: string): Promise<void> {
+  const session = await getSessionById(sessionId)
+  if (!session) return
+  if (session.frozen) {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: 'Cannot re-enrich frozen session'
+    })
+  }
+  
+  await enrichSession(sessionId)
+  // Update the updatedAt timestamp
+  await db
+    .update(orgSessions)
+    .set({ updatedAt: new Date() })
+    .where(eq(orgSessions.id, sessionId))
+}
+
+async function createMinimalSession(
+  userId: string,
+  organizationId: string,
+  startTime: Date,
+  endTime: Date,
+  task: { storyPoints: string | null; estimatedHours: string | null },
+): Promise<void> {
+  await db.insert(orgSessions).values({
+    userId,
+    organizationId,
+    startTime,
+    endTime,
+    note: 'System auto-created',
+    tasksCompleted: 1,
+    storyPointsCompleted: task.storyPoints || '0',
+    estimatedHoursSum: task.estimatedHours || '0',
+  })
+}
+
 export const orgSessionService = {
   startSession,
   stopSession,
@@ -196,4 +280,7 @@ export const orgSessionService = {
   getUserSessions,
   getOldLiveSessions,
   retroactivelyCloseSession,
+  enrichSession,
+  reenrichSession,
+  createMinimalSession,
 }

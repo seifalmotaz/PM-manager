@@ -3,6 +3,8 @@
   import TaskCard from './TaskCard.svelte'
   import { MoreHorizontal, Plus } from 'lucide-svelte'
   import { clsx } from 'clsx'
+  import { showToast } from '$lib/stores/toast.svelte'
+  import { isValidTransition, type TaskStatus } from 'shared'
 
   interface DragState {
     active: boolean
@@ -97,11 +99,39 @@
 
     const task = tasks.find(t => t.id === dragState.taskId)
     if (task && hoveredStatus && hoveredStatus !== task.status) {
-      await onDrop(dragState.taskId, hoveredStatus)
+      // Client-side validation for faster feedback
+      if (!isValidTransition(task.status as TaskStatus, hoveredStatus as TaskStatus)) {
+        showToast(`Cannot move from "${formatStatus(task.status)}" to "${formatStatus(hoveredStatus)}". Move through adjacent statuses.`, 'error')
+        dragState = { active: false, taskId: null, cloneEl: null, offsetX: 0, offsetY: 0 }
+        hoveredStatus = null
+        return
+      }
+
+      try {
+        await onDrop(dragState.taskId, hoveredStatus)
+      } catch (err: any) {
+        // Handle backend errors
+        if (err.message?.includes('Invalid status transition')) {
+          showToast(err.message, 'error')
+        } else if (err.message?.includes('completed sprints')) {
+          showToast(err.message, 'error')
+        } else {
+          showToast('Failed to update task status. Please try again.', 'error')
+        }
+      }
     }
 
     dragState = { active: false, taskId: null, cloneEl: null, offsetX: 0, offsetY: 0 }
     hoveredStatus = null
+  }
+
+  function formatStatus(status: string): string {
+    const labels: Record<string, string> = {
+      'todo': 'To Do',
+      'in_progress': 'In Progress',
+      'done': 'Done',
+    }
+    return labels[status] ?? status
   }
 </script>
 

@@ -12,6 +12,32 @@ const DEFAULT_SETTINGS = {
   requireClockIn: false,
 }
 
+async function getSettings(organizationId: string): Promise<{
+  defaultSprintLengthDays: number
+  workingHoursStart: string
+  workingHoursEnd: string
+  workingDays: number[]
+  timezone: string
+  requireClockIn: boolean
+} | null> {
+  const [settings] = await db
+    .select()
+    .from(organizationSettings)
+    .where(eq(organizationSettings.organizationId, organizationId))
+    .limit(1)
+
+  if (!settings) return null
+
+  return {
+    defaultSprintLengthDays: settings.defaultSprintLengthDays,
+    workingHoursStart: settings.workingHoursStart,
+    workingHoursEnd: settings.workingHoursEnd,
+    workingDays: parseWorkingDays(settings.workingDays),
+    timezone: settings.timezone,
+    requireClockIn: settings.requireClockIn,
+  }
+}
+
 async function getOrCreateSettings(organizationId: string) {
   const [existing] = await db
     .select()
@@ -77,6 +103,7 @@ async function updateSettings(
 }
 
 export const organizationService = {
+  getSettings,
   getOrCreateSettings,
   updateSettings,
 }

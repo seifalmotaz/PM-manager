@@ -1,6 +1,6 @@
 import { writable } from 'svelte/store'
 import { trpc } from '$lib/trpc'
-import { getOrganization } from './organization.svelte'
+import { getOrganization, loadOrganizations } from './organization.svelte'
 
 export interface TaskSummary {
   id: string
@@ -56,6 +56,12 @@ export async function fetchTasks(workspaceIds: string[]) {
 export async function fetchAllTasks(): Promise<TaskSummary[]> {
   isLoading.set(true)
   try {
+    // Ensure orgs are loaded
+    const orgState = getOrganization()
+    if (orgState.organizations.length === 0) {
+      await loadOrganizations()
+    }
+
     const orgs = getOrganization().organizations
     if (orgs.length === 0) {
       tasks.set([])

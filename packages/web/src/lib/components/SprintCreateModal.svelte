@@ -5,10 +5,14 @@
   let {
     isOpen = $bindable(false),
     projectId,
+    organizationSettings,
+    existingSprintCount = 0,
     onCreated,
   }: {
     isOpen?: boolean
     projectId: string
+    organizationSettings?: { defaultSprintLengthDays?: number } | null
+    existingSprintCount?: number
     onCreated: () => void
   } = $props()
 
@@ -18,6 +22,33 @@
   let endDate = $state('')
   let error = $state('')
   let isSubmitting = $state(false)
+
+  // Auto-fill name with next sprint number
+  $effect(() => {
+    if (isOpen && !name) {
+      name = `Sprint ${existingSprintCount + 1}`
+    }
+  })
+
+  // Auto-calculate end date when start date changes
+  $effect(() => {
+    if (startDate && !endDate && organizationSettings?.defaultSprintLengthDays) {
+      const d = new Date(startDate)
+      d.setDate(d.getDate() + organizationSettings.defaultSprintLengthDays)
+      endDate = d.toISOString().split('T')[0]
+    }
+  })
+
+  // Reset form when modal closes
+  $effect(() => {
+    if (!isOpen) {
+      name = ''
+      startDate = ''
+      endDate = ''
+      goal = ''
+      error = ''
+    }
+  })
 
   function resetForm() {
     name = ''

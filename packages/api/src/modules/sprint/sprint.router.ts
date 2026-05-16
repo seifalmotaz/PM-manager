@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { router, protectedProcedure, adminProcedure } from '../../trpc'
 import { sprintService } from './sprint.service'
-import { createSprintSchema, updateSprintSchema } from './sprint.schema'
+import { createSprintSchema, updateSprintSchema, completeSprintSchema } from './sprint.schema'
 
 export const sprintRouter = router({
   list: protectedProcedure
@@ -27,5 +27,11 @@ export const sprintRouter = router({
     .input(z.object({ id: z.string().uuid(), deleteTasks: z.boolean() }))
     .mutation(({ input, ctx }) =>
       sprintService.deleteSprint(input.id, ctx.user.id, input.deleteTasks),
+    ),
+
+  complete: protectedProcedure
+    .input(completeSprintSchema)
+    .mutation(({ input, ctx }) =>
+      sprintService.completeSprint(input.sprintId, input.unfinishedTaskAction, ctx.user.id),
     ),
 })

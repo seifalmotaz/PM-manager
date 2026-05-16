@@ -1,10 +1,10 @@
 import { z } from 'zod'
 import { router, protectedProcedure, adminProcedure } from '../../trpc'
 import { projectService } from './project.service'
-import { createOrgProcedure } from '../../middleware/org-access'
+import { orgProcedure } from '../../middleware/org-access'
 
 export const projectRouter = router({
-  listByOrg: createOrgProcedure('organizationId')
+  listByOrg: orgProcedure
     .input(z.object({ organizationId: z.string() }))
     .query(async ({ ctx, input }) => {
       return projectService.listByOrg(ctx.organizationId!, ctx.user.id)

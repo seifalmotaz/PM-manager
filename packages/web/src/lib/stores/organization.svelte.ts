@@ -1,5 +1,6 @@
 import { browser } from '$app/environment'
 import { goto } from '$app/navigation'
+import { trpc } from '$lib/trpc'
 
 export interface Organization {
   id: string
@@ -32,14 +33,26 @@ export function setActiveOrganization(org: Organization | null): void {
   }
 }
 
-export async function fetchOrganizations(): Promise<Organization[]> {
-  return _state.organizations
+export async function loadOrganizations(): Promise<Organization[]> {
+  try {
+    const orgs = await trpc.organization.list.query()
+    _state.organizations = orgs
+    return orgs
+  } catch (err) {
+    console.error('Failed to fetch organizations:', err)
+    return []
+  }
 }
 
 export async function loadActiveOrganization(): Promise<void> {
   if (!browser) {
     _state.isLoaded = true
     return
+  }
+
+  // Always ensure organizations are loaded first
+  if (_state.organizations.length === 0) {
+    await loadOrganizations()
   }
 
   const storedId = localStorage.getItem('activeOrgId')

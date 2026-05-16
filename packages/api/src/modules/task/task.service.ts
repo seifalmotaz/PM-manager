@@ -1,12 +1,14 @@
 import { db } from '../../db/connection'
-import { tasks, projects, workspaceMembers, sprints, workspaces } from '../../db/schema'
-import { eq, and, lt, ne, asc, inArray, count, or, ilike } from 'drizzle-orm'
+import { tasks, projects, workspaceMembers, sprints, workspaces, orgSessions } from '../../db/schema'
+import { eq, and, lt, ne, asc, inArray, count, or, ilike, isNull, gte, lte } from 'drizzle-orm'
 import { createAuditLog, auditFieldChange } from '../../shared/audit/audit.service'
 import { projectService } from '../project/project.service'
 import { workspaceService } from '../workspace/workspace.service'
 import { sprintService } from '../sprint/sprint.service'
 import { notificationService } from '../notification/notification.service'
+import { orgSessionService } from '../org-session/org-session.service'
 import { TRPCError } from '@trpc/server'
+import { isValidTransition, type TaskStatus } from 'shared'
 import { parseTaskInput } from './nlp-parser'
 import type { ParsedTaskInput } from './nlp-parser'
 
@@ -168,12 +170,33 @@ async function createTask(input: CreateTaskInput, userId: string) {
   return task
 }
 
+/**
+ * Validates that a task can be modified.
+ * Tasks in completed sprints are immutable.
+ */
+async function validateTaskMutability(task: { id: string; sprintId: string | null }, userId: string): Promise<void> {
+  if (task.sprintId) {
+    const sprint = await sprintService.getSprintById(task.sprintId)
+    if (sprint && sprint.status === 'completed') {
+      throw new TRPCError({
+        code: 'PRECONDITION_FAILED',
+        message: 'Cannot modify tasks in completed sprints. This sprint is locked.',
+      })
+    }
+  }
+  void userId // Reserved for future role-based exceptions
+}
+
 async function updateTask(
   id: string,
   updates: Record<string, unknown>,
   userId: string,
 ) {
   const task = await getTask(id, userId)
+
+  // Check if task is in a completed sprint (immutable)
+  await validateTaskMutability(task, userId)
+
   const updateData: Record<string, unknown> = {}
 
   for (const [key, value] of Object.entries(updates)) {
@@ -192,6 +215,28 @@ async function updateTask(
             message: 'Cannot assign tasks to a completed sprint',
           })
         }
+
+        // Auto-assign sprint flags when moving to active sprint
+        const newSprint = await sprintService.getSprint(newSprintId, userId)
+        
+        if (newSprint.status === 'active') {
+          // Task moved to active sprint
+          if (task.sprintId === null) {
+            // From backlog to active sprint
+            updateData.sprintFlag = 'unscheduled'
+          } else if (task.status === 'done') {
+            // Done task moved to active sprint - reopened
+            updateData.sprintFlag = 'reopened'
+          } else {
+            // Between sprints - no auto flag
+            if (!updates.sprintFlag) {
+              updateData.sprintFlag = 'unscheduled'
+            }
+          }
+        }
+      } else {
+        // Moving to backlog - clear flag
+        updateData.sprintFlag = null
       }
 
       // Audit log for sprint reassignment
@@ -200,11 +245,6 @@ async function updateTask(
         task.sprintId || 'none',
         newSprintId || 'none',
       )
-
-      // If sprintId is being set to null (moving to Backlog), also clear sprintFlag
-      if (newSprintId === null || newSprintId === undefined) {
-        updateData.sprintFlag = null
-      }
 
       // Apply sprintId update directly (skip generic loop fallthrough)
       if (newSprintId !== task.sprintId) {
@@ -269,6 +309,25 @@ async function changeStatus(id: string, newStatus: string, userId: string) {
 
   const oldStatus = task.status
 
+  // Check if task is in a completed sprint (immutable)
+  if (task.sprintId) {
+    const sprint = await sprintService.getSprintById(task.sprintId)
+    if (sprint && sprint.status === 'completed') {
+      throw new TRPCError({
+        code: 'PRECONDITION_FAILED',
+        message: 'Cannot change status of tasks in completed sprints. This sprint is locked.',
+      })
+    }
+  }
+
+  // Validate transition
+  if (!isValidTransition(oldStatus as TaskStatus, newStatus as TaskStatus)) {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: `Invalid status transition: ${oldStatus} → ${newStatus}. Must move through adjacent statuses (todo → in_progress → done).`
+    })
+  }
+
   const statusData: Record<string, unknown> = {
     status: newStatus,
     statusChangedAt: now,
@@ -280,6 +339,9 @@ async function changeStatus(id: string, newStatus: string, userId: string) {
   }
   if (newStatus === 'done') {
     statusData.completedAt = now
+    if (!task.startedAt) {
+      statusData.startedAt = now
+    }
   }
   if (oldStatus === 'done' && newStatus !== 'done') {
     statusData.completedAt = null
@@ -326,6 +388,52 @@ async function changeStatus(id: string, newStatus: string, userId: string) {
       newValue: undefined,
       userId,
     })
+  }
+
+  // Handle task completion - re-enrich session or auto-create minimal session
+  if (newStatus === 'done' && statusData.completedAt) {
+    await findAndReenrichSession(userId, id)
+  }
+
+  // Handle reopening from done
+  if (oldStatus === 'done' && newStatus !== 'done') {
+    // Check if task is in completed sprint - block reopening
+    if (task.sprintId) {
+      const sprint = await sprintService.getSprint(task.sprintId, userId)
+      if (sprint.status === 'completed') {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Cannot reopen tasks from completed sprints'
+        })
+      }
+    }
+
+    // Re-enrich to remove this task from session counts
+    const organizationId = await getTaskOrganization(id)
+    if (organizationId && task.completedAt) {
+      const [session] = await db
+        .select()
+        .from(orgSessions)
+        .where(
+          and(
+            eq(orgSessions.userId, userId),
+            eq(orgSessions.organizationId, organizationId),
+            lte(orgSessions.startTime, task.completedAt),
+            or(isNull(orgSessions.endTime), gte(orgSessions.endTime, task.completedAt)),
+          ),
+        )
+        .limit(1)
+
+      if (session) {
+        if (session.frozen) {
+          throw new TRPCError({
+            code: 'PRECONDITION_FAILED',
+            message: 'This sprint is completed. You cannot modify tasks from completed sprints.',
+          })
+        }
+        await orgSessionService.reenrichSession(session.id)
+      }
+    }
   }
 
   return updated
@@ -565,6 +673,86 @@ async function listTasksByOrg(organizationId: string, userId: string) {
     ...row.task,
     project: row.project,
   }))
+}
+
+async function getTaskOrganization(taskId: string): Promise<string | null> {
+  const [task] = await db
+    .select({ projectId: tasks.projectId })
+    .from(tasks)
+    .where(eq(tasks.id, taskId))
+    .limit(1)
+  
+  if (!task) return null
+  
+  const [project] = await db
+    .select({ workspaceId: projects.workspaceId })
+    .from(projects)
+    .where(eq(projects.id, task.projectId))
+    .limit(1)
+  
+  if (!project) return null
+  
+  const [workspace] = await db
+    .select({ organizationId: workspaces.organizationId })
+    .from(workspaces)
+    .where(eq(workspaces.id, project.workspaceId))
+    .limit(1)
+  
+  return workspace?.organizationId ?? null
+}
+
+async function findAndReenrichSession(userId: string, taskId: string): Promise<void> {
+  const [task] = await db
+    .select({
+      projectId: tasks.projectId,
+      completedAt: tasks.completedAt,
+      startedAt: tasks.startedAt,
+      storyPoints: tasks.storyPoints,
+      estimatedHours: tasks.estimatedHours,
+    })
+    .from(tasks)
+    .where(eq(tasks.id, taskId))
+    .limit(1)
+
+  if (!task?.completedAt) return
+
+  const organizationId = await getTaskOrganization(taskId)
+  if (!organizationId) return
+
+  // Find session that overlaps with completedAt timestamp
+  const [session] = await db
+    .select()
+    .from(orgSessions)
+    .where(
+      and(
+        eq(orgSessions.userId, userId),
+        eq(orgSessions.organizationId, organizationId),
+        lte(orgSessions.startTime, task.completedAt),
+        or(isNull(orgSessions.endTime), gte(orgSessions.endTime, task.completedAt)),
+      ),
+    )
+    .limit(1)
+
+  if (session) {
+    if (session.frozen) {
+      throw new TRPCError({
+        code: 'PRECONDITION_FAILED',
+        message: 'This sprint is completed. You cannot modify tasks from completed sprints.',
+      })
+    }
+    await orgSessionService.reenrichSession(session.id)
+  } else {
+    await orgSessionService.createMinimalSession(
+      userId,
+      organizationId,
+      task.startedAt ?? task.completedAt,
+      task.completedAt,
+      {
+        storyPoints: task.storyPoints,
+        estimatedHours: task.estimatedHours,
+      },
+    )
+  }
 }
 
 export const taskService = {

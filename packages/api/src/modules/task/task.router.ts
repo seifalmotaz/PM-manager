@@ -4,7 +4,7 @@ import { taskService } from './task.service'
 import { parseTaskInput } from './nlp-parser'
 import { orgSessions } from '../../db/schema'
 import { db } from '../../db/connection'
-import { createOrgProcedure } from '../../middleware/org-access'
+import { orgProcedure } from '../../middleware/org-access'
 
 export const taskRouter = router({
   parse: protectedProcedure
@@ -19,7 +19,7 @@ export const taskRouter = router({
         workspaceIds: z.array(z.string().uuid()).optional(),
         projectId: z.string().uuid().optional(),
         sprintId: z.string().uuid().optional(),
-        status: z.enum(['todo', 'in_progress', 'review', 'done']).optional(),
+        status: z.enum(['todo', 'in_progress', 'done']).optional(),
         assigneeId: z.string().uuid().optional(),
       }),
     )
@@ -82,7 +82,7 @@ export const taskRouter = router({
     .input(
       z.object({
         id: z.string().uuid(),
-        status: z.enum(['todo', 'in_progress', 'review', 'done']),
+        status: z.enum(['todo', 'in_progress', 'done']),
       }),
     )
     .mutation(({ input, ctx }) => {
@@ -115,7 +115,7 @@ export const taskRouter = router({
     .input(z.object({ query: z.string().min(1), workspaceIds: z.array(z.string().uuid()).optional() }))
     .query(({ input, ctx }) => taskService.searchTasks(input.query, input.workspaceIds, ctx.user.id)),
 
-  listByOrg: createOrgProcedure('organizationId')
+  listByOrg: orgProcedure
     .input(z.object({ organizationId: z.string() }))
     .query(async ({ ctx, input }) => {
       return taskService.listTasksByOrg(ctx.organizationId!, ctx.user.id)

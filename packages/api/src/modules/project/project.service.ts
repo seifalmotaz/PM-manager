@@ -7,16 +7,22 @@ import { TRPCError } from '@trpc/server'
 
 async function listByOrg(organizationId: string, userId: string) {
   // Find all workspaces belonging to this org where user is a member
+  // Use two-step approach to avoid Drizzle join issues with nullable org_id
+  const userMemberships = await db
+    .select({ workspaceId: workspaceMembers.workspaceId })
+    .from(workspaceMembers)
+    .where(eq(workspaceMembers.userId, userId))
+
+  const memberWorkspaceIds = userMemberships.map(m => m.workspaceId)
+  if (memberWorkspaceIds.length === 0) return []
+
   const userWss = await db
     .select({ wsId: workspaces.id })
-    .from(workspaceMembers)
-    .innerJoin(workspaces, eq(workspaces.id, workspaceMembers.workspaceId))
-    .where(
-      and(
-        eq(workspaceMembers.userId, userId),
-        eq(workspaces.organizationId, organizationId),
-      ),
-    )
+    .from(workspaces)
+    .where(and(
+      inArray(workspaces.id, memberWorkspaceIds),
+      eq(workspaces.organizationId, organizationId),
+    ))
 
   const wsIds = userWss.map(row => row.wsId)
   if (wsIds.length === 0) return []

@@ -1,8 +1,9 @@
 <script lang="ts">
   import type { TaskSummary } from '$lib/stores/tasks'
   import { selectedTask } from '$lib/stores/tasks'
+  import { getAuth } from '$lib/stores/auth.svelte'
   import { trpc } from '$lib/trpc'
-  import { X, Tag, Calendar, User, Clock, Trash2, CheckCircle2, Hash, AlertTriangle, Layers } from 'lucide-svelte'
+  import { X, Tag, Calendar, User, Clock, Trash2, CheckCircle2, Hash, AlertTriangle, Layers, Flag } from 'lucide-svelte'
   import { clsx } from 'clsx'
   import CommentList from './CommentList.svelte'
   import CommentInput from './CommentInput.svelte'
@@ -26,9 +27,37 @@
   let isSaving = $state(false)
   let isDeleting = $state(false)
   let openPopover = $state<string | null>(null)
-  let members = $state<Array<{ userId: string; user: { id: string; name: string; email: string; avatarUrl?: string | null } }>>([])
+  let members = $state<Array<{ userId: string; role?: string; user: { id: string; name: string; email: string; avatarUrl?: string | null } }>>([])
   let isLoadingMembers = $state(false)
+  // svelte-ignore state_referenced_locally
   let commentKey = $state(0)
+  // svelte-ignore state_referenced_locally
+  let sprintFlag = $state<string | null>(task.sprintFlag ?? null)
+  let sprintStatus = $state<string | null>(null)
+
+  // Determine if current user can manage sprint flags (PM/Admin = owner or admin role)
+  let canManageSprintFlag = $derived(() => {
+    const auth = getAuth()
+    if (!auth.currentUser) return false
+    const member = members.find(m => m.userId === auth.currentUser!.id)
+    return member?.role === 'owner' || member?.role === 'admin'
+  })
+
+  $effect(() => {
+    async function loadSprintStatus() {
+      if (!task.sprintId) {
+        sprintStatus = null
+        return
+      }
+      try {
+        const sprint = await trpc.sprint.byId.query({ id: task.sprintId })
+        sprintStatus = sprint.status ?? null
+      } catch {
+        sprintStatus = null
+      }
+    }
+    loadSprintStatus()
+  })
 
   $effect(() => {
     async function loadMembers() {
@@ -126,6 +155,29 @@
 
   function handleCommentCreated() {
     commentKey++
+  }
+
+  async function handleSprintFlagChange() {
+    try {
+      await trpc.task.update.mutate({
+        id: task.id,
+        sprintFlag: sprintFlag || null
+      })
+      onRefresh?.()
+    } catch (err) {
+      console.error('Failed to update sprint flag:', err)
+    }
+  }
+
+  function formatSprintFlag(flag: string | null): string {
+    if (!flag) return 'Planned'
+    const labels: Record<string, string> = {
+      'unscheduled': 'Unscheduled',
+      'pulled_forward': 'Pulled Forward',
+      'emergency': 'Emergency',
+      'reopened': 'Reopened',
+    }
+    return labels[flag] ?? flag
   }
 </script>
 
@@ -286,8 +338,39 @@
 
       <div class="meta-row">
         <div class="meta-label"><Layers size={14} /> Sprint</div>
-        <button class="meta-value stub">Not in a sprint</button>
+        {#if task.sprintId}
+          <button class="meta-value stub">In sprint</button>
+        {:else}
+          <button class="meta-value stub">Not in a sprint</button>
+        {/if}
       </div>
+
+      {#if task.sprintId}
+        <div class="meta-row">
+          <div class="meta-label"><Flag size={14} /> Sprint Flag</div>
+          <div class="meta-value-wrapper">
+            {#if canManageSprintFlag() && sprintStatus !== 'completed'}
+              <select
+                bind:value={sprintFlag}
+                onchange={handleSprintFlagChange}
+                class="meta-select"
+              >
+                <option value="">Planned (no flag)</option>
+                <option value="unscheduled">Unscheduled</option>
+                <option value="pulled_forward">Pulled Forward</option>
+                <option value="emergency">Emergency</option>
+                <option value="reopened">Reopened</option>
+              </select>
+            {:else}
+              {#if task.sprintFlag}
+                <span class="flag-badge {task.sprintFlag}">{formatSprintFlag(task.sprintFlag)}</span>
+              {:else}
+                <span class="flag-badge planned">Planned</span>
+              {/if}
+            {/if}
+          </div>
+        </div>
+      {/if}
     </div>
 
     <div class="description-section">
@@ -507,6 +590,37 @@
     background-color: var(--bg-app);
     outline: none;
   }
+
+  .meta-select {
+    font-size: 0.875rem;
+    color: var(--text-main);
+    font-weight: 500;
+    padding: 0.25rem 0.5rem;
+    margin-left: -0.5rem;
+    border-radius: 4px;
+    border: 1px solid var(--border-main);
+    background-color: var(--bg-app);
+    cursor: pointer;
+  }
+
+  .meta-select:focus {
+    outline: none;
+    border-color: var(--brand-primary);
+  }
+
+  .flag-badge {
+    display: inline-flex;
+    padding: 0.25rem 0.5rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.75rem;
+    font-weight: 500;
+  }
+
+  .flag-badge.unscheduled { background: #fef3c7; color: #92400e; }
+  .flag-badge.pulled_forward { background: #dbeafe; color: #1e40af; }
+  .flag-badge.emergency { background: #fee2e2; color: #991b1b; }
+  .flag-badge.reopened { background: #f3e8ff; color: #6b21a8; }
+  .flag-badge.planned { background: var(--bg-surface-hover); color: var(--text-muted); }
 
   .description-section {
     display: flex;

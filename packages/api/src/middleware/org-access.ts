@@ -2,7 +2,7 @@ import { TRPCError } from '@trpc/server'
 import { protectedProcedure } from '../trpc'
 import { db } from '../db/connection'
 import { workspaces, workspaceMembers } from '../db/schema'
-import { eq, and } from 'drizzle-orm'
+import { eq, and, inArray } from 'drizzle-orm'
 import type { Context, OrgMembershipCache } from '../trpc'
 import { WorkOS } from '@workos-inc/node'
 import { z } from 'zod'
@@ -36,23 +36,32 @@ async function validateOrgMembership(
   }
 
   // Check database: user has workspace membership in any workspace belonging to this org
-  const memberships = await db
-    .select({ orgId: workspaces.organizationId })
+  // Use a two-step query to avoid Drizzle join issues
+  const userWorkspaces = await db
+    .select({ workspaceId: workspaceMembers.workspaceId })
     .from(workspaceMembers)
-    .innerJoin(workspaces, eq(workspaces.id, workspaceMembers.workspaceId))
-    .where(and(
-      eq(workspaceMembers.userId, userId),
-      eq(workspaces.organizationId, organizationId),
-    ))
-    .limit(1)
+    .where(eq(workspaceMembers.userId, userId))
 
-  if (memberships.length > 0) {
-    // Cache this membership
-    const existingCache = membershipsMap.get(userId) || []
-    const updatedCache = existingCache.filter((c: OrgMembershipCache) => c.orgId !== organizationId)
-    updatedCache.push({ orgId: organizationId, orgName: '', cachedAt: new Date() })
-    membershipsMap.set(userId, updatedCache)
-    return
+  const workspaceIds = userWorkspaces.map(w => w.workspaceId)
+
+  if (workspaceIds.length > 0) {
+    const matchingWorkspaces = await db
+      .select({ id: workspaces.id })
+      .from(workspaces)
+      .where(and(
+        inArray(workspaces.id, workspaceIds),
+        eq(workspaces.organizationId, organizationId),
+      ))
+      .limit(1)
+
+    if (matchingWorkspaces.length > 0) {
+      // Cache this membership
+      const existingCache = membershipsMap.get(userId) || []
+      const updatedCache = existingCache.filter((c: OrgMembershipCache) => c.orgId !== organizationId)
+      updatedCache.push({ orgId: organizationId, orgName: '', cachedAt: new Date() })
+      membershipsMap.set(userId, updatedCache)
+      return
+    }
   }
 
   // Fallback: Check WorkOS memberships (slower, external API call)
@@ -100,6 +109,9 @@ export const orgProcedure = protectedProcedure
 // For procedures that have orgId in a different field name
 export function createOrgProcedure(fieldName: string = 'organizationId') {
   return protectedProcedure.use(async ({ ctx, input, next }) => {
+    if (!input) {
+      throw new TRPCError({ code: 'BAD_REQUEST', message: 'Organization ID required' })
+    }
     const rawInput = input as unknown as Record<string, unknown>
     const organizationId = rawInput[fieldName] as string | undefined
 

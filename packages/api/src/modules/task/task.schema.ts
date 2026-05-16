@@ -29,7 +29,7 @@ export const updateTaskSchema = z.object({
 
 export const changeStatusSchema = z.object({
   id: z.string().uuid(),
-  status: z.enum(['todo', 'in_progress', 'review', 'done']),
+  status: z.enum(['todo', 'in_progress', 'done']),
 })
 
 export const taskIdSchema = z.object({

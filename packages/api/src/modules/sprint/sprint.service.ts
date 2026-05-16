@@ -1,8 +1,9 @@
 import { db } from '../../db/connection'
-import { sprints, tasks, projects } from '../../db/schema'
-import { eq, and, isNull, sql, asc } from 'drizzle-orm'
+import { sprints, tasks, projects, orgSessions, workspaces } from '../../db/schema'
+import { eq, and, isNull, sql, asc, inArray, gt, or, gte, ne, lt } from 'drizzle-orm'
 import { createAuditLog } from '../../shared/audit/audit.service'
 import { projectService } from '../project/project.service'
+import { organizationService } from '../organization/organization.service'
 import { TRPCError } from '@trpc/server'
 import type { Sprint } from './sprint.type'
 import { notificationService } from '../notification/notification.service'
@@ -116,6 +117,8 @@ async function getSprintById(id: string): Promise<SprintRow | null> {
   return row as SprintRow ?? null
 }
 
+export { getSprintById }
+
 /**
  * List all sprints for a project. Access-checked via projectService.
  * Performs lazy status refresh for any sprint whose computed status differs from stored status.
@@ -153,16 +156,43 @@ async function getSprint(id: string, userId: string): Promise<SprintRow> {
 
 /**
  * Create a new sprint. Access-checked via projectService.
+ * If endDate is not provided, auto-calculates from startDate + defaultSprintLengthDays (from org settings).
  */
 async function createSprint(
-  input: { projectId: string; name: string; goal?: string; startDate: string; endDate: string },
+  input: { projectId: string; name: string; goal?: string; startDate: string; endDate?: string },
   userId: string,
 ): Promise<SprintRow> {
   // Access check
-  await projectService.getProject(input.projectId, userId)
+  const project = await projectService.getProject(input.projectId, userId)
 
   const startDate = new Date(input.startDate)
-  const endDate = new Date(input.endDate)
+
+  // Resolve organizationId from project → workspace
+  const [workspace] = await db
+    .select({ organizationId: workspaces.organizationId })
+    .from(workspaces)
+    .where(eq(workspaces.id, project.workspaceId))
+    .limit(1)
+
+  let endDate: Date
+
+  if (input.endDate) {
+    endDate = new Date(input.endDate)
+  } else {
+    // Auto-calculate endDate from organization settings
+    const defaultDays = 14 // fallback default
+    let calculatedDays = defaultDays
+
+    if (workspace?.organizationId) {
+      const settings = await organizationService.getSettings(workspace.organizationId)
+      if (settings) {
+        calculatedDays = settings.defaultSprintLengthDays
+      }
+    }
+
+    endDate = new Date(startDate)
+    endDate.setDate(endDate.getDate() + calculatedDays)
+  }
 
   if (startDate >= endDate) {
     throw new TRPCError({
@@ -302,12 +332,128 @@ async function deleteSprint(id: string, userId: string, deleteTasks: boolean): P
   await db.delete(sprints).where(eq(sprints.id, id))
 }
 
+/**
+ * Complete a sprint. Access-checked via projectService.
+ * Validates sprint is active, handles unfinished tasks, freezes overlapping org_sessions,
+ * creates audit log, and sends notification.
+ */
+async function completeSprint(
+  sprintId: string,
+  unfinishedTaskAction: 'backlog' | 'next_sprint',
+  userId: string,
+): Promise<SprintRow> {
+  // 1. Get sprint and validate
+  const sprint = await getSprintById(sprintId)
+  if (!sprint) {
+    throw new TRPCError({ code: 'NOT_FOUND', message: 'Sprint not found' })
+  }
+
+  // Access check via project
+  await projectService.getProject(sprint.projectId, userId)
+
+  // Validate sprint is active (not planned, not already completed)
+  if (sprint.status === 'completed') {
+    throw new TRPCError({ code: 'BAD_REQUEST', message: 'Sprint is already completed' })
+  }
+
+  // 2. Find unfinished tasks
+  const unfinishedTasks = await db
+    .select()
+    .from(tasks)
+    .where(and(eq(tasks.sprintId, sprintId), ne(tasks.status, 'done')))
+
+  // 3. Find next sprint (same project, later start date)
+  const [nextSprint] = await db
+    .select()
+    .from(sprints)
+    .where(and(eq(sprints.projectId, sprint.projectId), gt(sprints.startDate, sprint.startDate), ne(sprints.id, sprintId)))
+    .orderBy(asc(sprints.startDate))
+    .limit(1)
+
+  // 4. Handle unfinished tasks
+  if (unfinishedTasks.length > 0) {
+    const taskIds = unfinishedTasks.map((t) => t.id)
+
+    if (unfinishedTaskAction === 'backlog') {
+      // Move to backlog: set sprintId = null, clear sprintFlag
+      await db
+        .update(tasks)
+        .set({ sprintId: null, sprintFlag: null, updatedAt: new Date() })
+        .where(inArray(tasks.id, taskIds))
+    } else if (unfinishedTaskAction === 'next_sprint' && nextSprint) {
+      // Move to next sprint, set sprintFlag = 'unscheduled'
+      await db
+        .update(tasks)
+        .set({ sprintId: nextSprint.id, sprintFlag: 'unscheduled', updatedAt: new Date() })
+        .where(inArray(tasks.id, taskIds))
+    } else {
+      // Fallback to backlog if no next sprint
+      await db
+        .update(tasks)
+        .set({ sprintId: null, sprintFlag: null, updatedAt: new Date() })
+        .where(inArray(tasks.id, taskIds))
+    }
+  }
+
+  // 5. Compute plannedPoints
+  const plannedPoints = await computePlannedPoints(sprintId)
+
+  // 6. Update sprint status
+  const [updatedSprint] = await db
+    .update(sprints)
+    .set({ status: 'completed', plannedPoints: plannedPoints.toString(), updatedAt: new Date() })
+    .where(eq(sprints.id, sprintId))
+    .returning()
+
+  // 7. Freeze overlapping org_sessions
+  // Get all assignees for tasks in this sprint
+  const sprintTasks = await db.select({ assigneeId: tasks.assigneeId }).from(tasks).where(eq(tasks.sprintId, sprintId))
+
+  const assigneeIds = [...new Set(sprintTasks.map((t) => t.assigneeId).filter(Boolean))]
+
+  // Freeze sessions for these users that overlap the sprint date range
+  if (assigneeIds.length > 0) {
+    await db
+      .update(orgSessions)
+      .set({ frozen: true, updatedAt: new Date() })
+      .where(
+        and(
+          inArray(orgSessions.userId, assigneeIds as string[]),
+          lt(orgSessions.startTime, sprint.endDate),
+          or(isNull(orgSessions.endTime), gte(orgSessions.endTime, sprint.startDate)),
+        ),
+      )
+  }
+
+  // 8. Create audit log
+  await createAuditLog({
+    entityType: 'sprint',
+    entityId: sprintId,
+    action: 'completed',
+    field: 'status',
+    oldValue: sprint.status,
+    newValue: 'completed',
+    userId,
+  })
+
+  // 9. Notify
+  const [proj] = await db.select({ workspaceId: projects.workspaceId }).from(projects).where(eq(projects.id, sprint.projectId)).limit(1)
+
+  if (proj) {
+    notificationService.notifySprintEnd(sprintId, sprint.name, proj.workspaceId)
+  }
+
+  return updatedSprint as SprintRow
+}
+
 export const sprintService = {
   listByProject,
   getSprint,
   createSprint,
   updateSprint,
   deleteSprint,
+  completeSprint,
   isSprintLocked,
   computePlannedPoints,
+  getSprintById,
 }
