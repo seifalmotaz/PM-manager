@@ -1,12 +1,13 @@
 import { z } from 'zod'
 import { router, protectedProcedure } from '../../trpc'
 import { orgSessionService } from './org-session.service'
+import { createOrgProcedure } from '../../middleware/org-access'
 
 export const orgSessionRouter = router({
-  start: protectedProcedure
+  start: createOrgProcedure('organizationId')
     .input(z.object({ organizationId: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      return orgSessionService.startSession(ctx.user.id, input.organizationId)
+      return orgSessionService.startSession(ctx.user.id, ctx.organizationId!)
     }),
 
   stop: protectedProcedure
@@ -15,10 +16,10 @@ export const orgSessionRouter = router({
       return orgSessionService.stopSession(input.sessionId, ctx.user.id)
     }),
 
-  getActive: protectedProcedure
+  getActive: createOrgProcedure('organizationId')
     .input(z.object({ organizationId: z.string() }))
     .query(async ({ ctx, input }) => {
-      return orgSessionService.getActiveSession(ctx.user.id, input.organizationId)
+      return orgSessionService.getActiveSession(ctx.user.id, ctx.organizationId!)
     }),
 
   getAllActive: protectedProcedure.query(async ({ ctx }) => {

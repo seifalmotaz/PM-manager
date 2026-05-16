@@ -1,6 +1,7 @@
 <script lang="ts">
   import { page } from '$app/stores'
   import { getOrganization, navigateToOrg, type Organization } from '$lib/stores/organization.svelte'
+  import { showToast } from '$lib/stores/toast.svelte'
   import { ChevronDown, Plus } from 'lucide-svelte'
   import { clsx } from 'clsx'
 
@@ -27,7 +28,7 @@
 
   function handleAddOrg() {
     isOpen = false
-    console.log('Add organization — WorkOS join flow')
+    showToast('Organization management is coming soon. Contact support to join an existing organization.', 'info')
   }
 </script>
 

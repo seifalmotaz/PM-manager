@@ -1,6 +1,7 @@
 <script lang="ts">
   import { trpc } from '$lib/trpc'
   import { fetchActiveSessions } from '$lib/stores/org-sessions.svelte'
+  import { showToast } from '$lib/stores/toast.svelte'
   import { Clock, X } from 'lucide-svelte'
 
   let {
@@ -19,14 +20,15 @@
   let mode = $state<'now' | 'custom'>('now')
   let customEndTime = $state('')
 
-  const startDate = new Date(startTime)
-  const formattedDate = startDate.toLocaleDateString('en-US', {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  })
+  let formattedDate = $derived(
+    new Date(startTime).toLocaleDateString('en-US', {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    })
+  )
 
   $effect(() => {
     // Pre-fill custom end time with current time
@@ -47,6 +49,7 @@
       onClose()
     } catch (err: any) {
       console.error('Failed to close session:', err)
+      showToast('Failed to close session. Please try again.', 'error')
     } finally {
       isProcessing = false
     }
@@ -65,6 +68,7 @@
       onClose()
     } catch (err: any) {
       console.error('Failed to close session:', err)
+      showToast('Failed to close session. Please try again.', 'error')
     } finally {
       isProcessing = false
     }

@@ -29,6 +29,7 @@
   import SessionOverflow from '$lib/components/SessionOverflow.svelte'
   import { getSessions, fetchActiveSessions, startElapsedTimer, stopElapsedTimer } from '$lib/stores/org-sessions.svelte'
   import RetroactiveCloseDialog from '$lib/components/RetroactiveCloseDialog.svelte'
+  import Toast from '$lib/components/Toast.svelte'
 
   let { children } = $props()
   let isSidebarCollapsed = $state(true)
@@ -245,6 +246,8 @@
       onClose={() => (retroactiveSession = null)}
     />
   {/if}
+
+  <Toast />
 </div>
 
 <style>

@@ -3,7 +3,7 @@ export type OrganizationSettings = {
   defaultSprintLengthDays: number
   workingHoursStart: string
   workingHoursEnd: string
-  workingDays: string // JSON array stored as text
+  workingDays: number[] // JSON array parsed to number array
   timezone: string
   requireClockIn: boolean
   createdAt: Date

@@ -4,6 +4,7 @@ import { taskService } from './task.service'
 import { parseTaskInput } from './nlp-parser'
 import { orgSessions } from '../../db/schema'
 import { db } from '../../db/connection'
+import { createOrgProcedure } from '../../middleware/org-access'
 
 export const taskRouter = router({
   parse: protectedProcedure
@@ -98,6 +99,14 @@ export const taskRouter = router({
       return taskService.listHome(input.workspaceIds, ctx.user.id)
     }),
 
+  homeWithOrganization: protectedProcedure
+    .input(z.object({
+      workspaceIds: z.array(z.string().uuid()),
+    }))
+    .query(async ({ input, ctx }) => {
+      return taskService.listTasksWithOrganization(input.workspaceIds, ctx.user.id)
+    }),
+
   overdueCount: protectedProcedure.query(({ ctx }) => {
     return taskService.getOverdueCount(ctx.user.id)
   }),
@@ -106,10 +115,10 @@ export const taskRouter = router({
     .input(z.object({ query: z.string().min(1), workspaceIds: z.array(z.string().uuid()).optional() }))
     .query(({ input, ctx }) => taskService.searchTasks(input.query, input.workspaceIds, ctx.user.id)),
 
-  listByOrg: protectedProcedure
+  listByOrg: createOrgProcedure('organizationId')
     .input(z.object({ organizationId: z.string() }))
     .query(async ({ ctx, input }) => {
-      return taskService.listTasksByOrg(input.organizationId, ctx.user.id)
+      return taskService.listTasksByOrg(ctx.organizationId!, ctx.user.id)
     }),
 
   completeWithCrossOrgSession: protectedProcedure

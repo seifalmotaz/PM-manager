@@ -401,6 +401,46 @@ async function listHome(workspaceIds: string[], userId: string) {
   }))
 }
 
+async function listTasksWithOrganization(
+  workspaceIds: string[],
+  userId: string,
+): Promise<(typeof tasks.$inferSelect & { project: typeof projects.$inferSelect | null; organization: { id: string; name: string } | null })[]> {
+  // Note: userId is available for future use (e.g., filtering by assigned tasks)
+  void userId
+
+  if (workspaceIds.length === 0) return []
+
+  // Get projects in workspaces
+  const projRows = await db
+    .select({ id: projects.id })
+    .from(projects)
+    .where(inArray(projects.workspaceId, workspaceIds))
+
+  const projectIds = projRows.map(p => p.id)
+  if (projectIds.length === 0) return []
+
+  // Get tasks with their projects and workspace org IDs
+  const rows = await db
+    .select({
+      task: tasks,
+      project: projects,
+      workspace: workspaces,
+    })
+    .from(tasks)
+    .leftJoin(projects, eq(tasks.projectId, projects.id))
+    .leftJoin(workspaces, eq(projects.workspaceId, workspaces.id))
+    .where(inArray(tasks.projectId, projectIds))
+    .orderBy(asc(tasks.createdAt))
+
+  return rows.map(row => ({
+    ...row.task,
+    project: row.project,
+    organization: row.workspace?.organizationId
+      ? { id: row.workspace.organizationId, name: '' } // Frontend will resolve name
+      : null,
+  }))
+}
+
 export interface TaskSearchResult {
   tasks: Array<{ id: string; title: string; status: string; priority: string | null; projectId: string; projectName?: string }>
   projects: Array<{ id: string; name: string; workspaceId: string }>
@@ -537,6 +577,7 @@ export const taskService = {
   deleteTask,
   getOverdueCount,
   listHome,
+  listTasksWithOrganization,
   searchTasks,
   listTasksByOrg,
 }

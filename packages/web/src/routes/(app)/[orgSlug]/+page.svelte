@@ -2,6 +2,7 @@
   import { onMount } from 'svelte'
   import { getOrganization } from '$lib/stores/organization.svelte'
   import { tasks, isLoading, selectedTask, fetchOverdueCount } from '$lib/stores/tasks'
+  import { showToast } from '$lib/stores/toast.svelte'
   import KanbanBoard from '$lib/components/KanbanBoard.svelte'
   import TaskCard from '$lib/components/TaskCard.svelte'
   import QuickAddInput from '$lib/components/QuickAddInput.svelte'
@@ -43,6 +44,7 @@
       tasks.set(orgTasks)
     } catch (err) {
       console.error('Failed to fetch org tasks:', err)
+      showToast('Failed to load tasks. Please try again.', 'error')
       tasks.set([])
     } finally {
       isLoading.set(false)
@@ -55,6 +57,7 @@
       if (orgId) await fetchOrgTasks(orgId)
     } catch (err) {
       console.error('Failed to change task status:', err)
+      showToast('Failed to update task status. Please try again.', 'error')
     }
   }
 

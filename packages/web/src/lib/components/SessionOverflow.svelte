@@ -85,15 +85,6 @@
     50% { opacity: 1; }
   }
 
-  .chevron {
-    transition: transform 0.2s;
-    color: var(--text-muted);
-  }
-
-  .chevron.open {
-    transform: rotate(180deg);
-  }
-
   .overflow-dropdown {
     position: absolute;
     top: calc(100% + 0.375rem);

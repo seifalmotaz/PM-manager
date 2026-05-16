@@ -3,6 +3,7 @@
   import { tasks, isLoading, fetchAllTasks, selectedTask, fetchOverdueCount } from '$lib/stores/tasks'
   import { fetchActiveSessions, startElapsedTimer, getSessions } from '$lib/stores/org-sessions.svelte'
   import { getOrganization } from '$lib/stores/organization.svelte'
+  import { showToast } from '$lib/stores/toast.svelte'
   import KanbanBoard from '$lib/components/KanbanBoard.svelte'
   import TaskCard from '$lib/components/TaskCard.svelte'
   import QuickAddInput from '$lib/components/QuickAddInput.svelte'
@@ -39,6 +40,7 @@
         await fetchAllTasks()
       } catch (err) {
         console.error('Failed to change task status:', err)
+        showToast('Failed to update task status. Please try again.', 'error')
       }
       return
     }
@@ -80,6 +82,7 @@
       await fetchAllTasks()
     } catch (err) {
       console.error('Failed to change task status:', err)
+      showToast('Failed to update task status. Please try again.', 'error')
     }
   }
 

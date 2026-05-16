@@ -1,5 +1,6 @@
 import { trpc } from '$lib/trpc'
 import { getOrganization, type Organization } from './organization.svelte'
+import { showToast } from '$lib/stores/toast.svelte'
 
 interface ActiveSession {
   id: string
@@ -65,6 +66,7 @@ export async function fetchActiveSessions(): Promise<void> {
     }))
   } catch (err: any) {
     console.error('Failed to fetch active sessions:', err)
+    showToast('Failed to load your active sessions. Please try again.', 'error')
     _state.error = err?.message ?? 'Failed to fetch sessions'
     _state.sessions = []
   } finally {
@@ -86,6 +88,8 @@ export async function startSession(organizationId: string): Promise<void> {
     ]
   } catch (err: any) {
     console.error('Failed to start session:', err)
+    const message = err instanceof Error ? err.message : 'Failed to start session'
+    showToast(message, 'error')
     _state.error = err?.message ?? 'Failed to start session'
   }
 }
@@ -97,6 +101,7 @@ export async function stopSession(sessionId: string): Promise<void> {
     _state.sessions = _state.sessions.filter(s => s.session.id !== sessionId)
   } catch (err: any) {
     console.error('Failed to stop session:', err)
+    showToast('Failed to stop session. Please try again.', 'error')
     _state.error = err?.message ?? 'Failed to stop session'
   }
 }

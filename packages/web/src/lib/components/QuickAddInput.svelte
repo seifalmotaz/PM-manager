@@ -5,6 +5,8 @@
   import { Layers, Plus, Tag, Calendar, User, Zap, Send } from 'lucide-svelte'
   import { clsx } from 'clsx'
   import { getSessions } from '$lib/stores/org-sessions.svelte'
+  import { getOrganization } from '$lib/stores/organization.svelte'
+  import { showToast } from '$lib/stores/toast.svelte'
 
   let {
     onCreated,
@@ -23,6 +25,7 @@
   interface ProjectSummary {
     id: string
     name: string
+    isInbox?: boolean
   }
 
   let input = $state('')
@@ -59,21 +62,35 @@
   // Synchronous parse
   let parsed = $derived(parseTaskInput(input))
 
-  // Determine the effective org ID for project fetching
-  let effectiveOrgId = $derived(orgId || selectedOrgId)
+  // All organizations the user belongs to
+  let allOrgs = $derived(getOrganization().organizations)
 
-  // Determine if we need to show org picker
+  // Determine if we need to show org picker based on L1 Decision 7 rules:
+  // - If on per-org page (orgId prop provided), don't show picker
+  // - If clocked in to exactly 1 org, don't show picker (use that org)
+  // - If clocked in to 0 or 2+ orgs, show picker with ALL orgs
   let needsOrgPicker = $derived(
-    !orgId && !selectedOrgId
+    !orgId && getSessions().sessions.length !== 1
+  )
+
+  // Get the effective target org ID based on context
+  let targetOrgId = $derived(
+    orgId || (getSessions().sessions.length === 1 ? getSessions().sessions[0].session.organizationId : selectedOrgId)
+  )
+
+  // Find inbox project - if org has isInbox project, use it
+  let inboxProjectId = $derived(
+    (() => {
+      const inbox = projects.find(p => p.isInbox === true)
+      if (inbox) return inbox.id
+      return projects[0]?.id ?? ''
+    })()
   )
 
   // Fetch projects based on org context
   $effect(() => {
     const wsIds = $activeFilterIds
     isLoadingProjects = true
-
-    // Determine which org to fetch projects for
-    const targetOrgId = orgId || selectedOrgId
 
     if (!targetOrgId) {
       // No org context - fetch based on workspaces
@@ -90,31 +107,26 @@
           if (selectedProjectId === '' && projects.length > 0) {
             selectedProjectId = projects[0].id
           }
-        } catch {
+        } catch (err) {
+          console.error('Failed to fetch projects:', err)
+          showToast('Failed to load projects', 'error')
           projects = []
         } finally {
           isLoadingProjects = false
         }
       })()
     } else {
-      // Has org context - fetch projects for that org
-      // Note: This requires org→workspace mapping which is deferred to future phase
-      // For now, we fetch all workspaces and filter conceptually
+      // Has org context - fetch projects for that org using listByOrg
       ;(async () => {
         try {
-          // When orgId is provided, we would normally fetch projects via the org's workspaces
-          // This is a placeholder that uses the first workspace for now
-          // TODO: Implement proper org→workspace resolution when that data model is ready
-          if (wsIds.length > 0) {
-            const result = await trpc.project.list.query({ workspaceId: wsIds[0] })
-            projects = result as ProjectSummary[]
-            if (selectedProjectId === '' && projects.length > 0) {
-              selectedProjectId = projects[0].id
-            }
-          } else {
-            projects = []
-          }
-        } catch {
+          const result = await trpc.project.listByOrg.query({ organizationId: targetOrgId })
+          projects = result as ProjectSummary[]
+          // Auto-select inbox project if available, otherwise first project
+          const inbox = projects.find(p => p.isInbox === true)
+          selectedProjectId = inbox?.id ?? projects[0]?.id ?? ''
+        } catch (err) {
+          console.error('Failed to fetch projects:', err)
+          showToast('Failed to load projects', 'error')
           projects = []
         } finally {
           isLoadingProjects = false
@@ -179,6 +191,7 @@
       onCreated()
     } catch (err) {
       console.error('Failed to create task:', err)
+      showToast(err instanceof Error ? err.message : 'Failed to create task', 'error')
     } finally {
       isCreating = false
     }
@@ -273,9 +286,9 @@ disabled={isCreating || isLoadingProjects}
               }}
             >
               <option value="">Which org?</option>
-              {#each getSessions().sessions as session}
-                <option value={session.session.organizationId}>
-                  {session.organizationName}
+              {#each allOrgs as org}
+                <option value={org.id}>
+                  {org.name}
                 </option>
               {/each}
             </select>

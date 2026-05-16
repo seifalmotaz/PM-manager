@@ -3,6 +3,12 @@ import { orgSessions, tasks } from '../../db/schema'
 import { eq, and, isNull, desc, gte, lte, sql } from 'drizzle-orm'
 import { TRPCError } from '@trpc/server'
 
+function assertNotFrozen(session: typeof orgSessions.$inferSelect): void {
+  if (session.frozen) {
+    throw new TRPCError({ code: 'FORBIDDEN', message: 'Session is frozen and cannot be modified' })
+  }
+}
+
 async function startSession(userId: string, organizationId: string) {
   // Create a new session (no end time yet)
   const [session] = await db
@@ -33,6 +39,8 @@ async function stopSession(sessionId: string, userId: string) {
   if (existing.endTime) {
     throw new TRPCError({ code: 'BAD_REQUEST', message: 'Session already stopped' })
   }
+
+  assertNotFrozen(existing)
 
   const endTime = new Date()
 
@@ -145,6 +153,8 @@ async function retroactivelyCloseSession(
   if (existing.endTime) {
     throw new TRPCError({ code: 'BAD_REQUEST', message: 'Session already stopped' })
   }
+
+  assertNotFrozen(existing)
 
   // Compute enrichment against the retroactive end time
   const enriched = await db

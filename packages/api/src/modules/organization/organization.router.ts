@@ -16,7 +16,7 @@ export const organizationRouter = router({
         defaultSprintLengthDays: z.number().optional(),
         workingHoursStart: z.string().optional(),
         workingHoursEnd: z.string().optional(),
-        workingDays: z.string().optional(),
+        workingDays: z.array(z.number()).optional(),
         timezone: z.string().optional(),
         requireClockIn: z.boolean().optional(),
       })

@@ -1,6 +1,7 @@
 import { db } from '../../db/connection'
 import { organizationSettings } from '../../db/schema'
 import { eq } from 'drizzle-orm'
+import { parseWorkingDays, serializeWorkingDays } from '../../shared/utils/working-days'
 
 const DEFAULT_SETTINGS = {
   defaultSprintLengthDays: 14,
@@ -19,7 +20,10 @@ async function getOrCreateSettings(organizationId: string) {
     .limit(1)
 
   if (existing) {
-    return existing
+    return {
+      ...existing,
+      workingDays: parseWorkingDays(existing.workingDays),
+    }
   }
 
   // Create with defaults
@@ -31,7 +35,10 @@ async function getOrCreateSettings(organizationId: string) {
     })
     .returning()
 
-  return created
+  return {
+    ...created,
+    workingDays: parseWorkingDays(created.workingDays),
+  }
 }
 
 async function updateSettings(
@@ -40,14 +47,29 @@ async function updateSettings(
     defaultSprintLengthDays: number
     workingHoursStart: string
     workingHoursEnd: string
-    workingDays: string
+    workingDays: number[]
     timezone: string
     requireClockIn: boolean
   }>
 ) {
+  // Build update object for DB - workingDays must be serialized to string
+  const { workingDays, ...rest } = updates
+  const dbUpdates: Partial<{
+    defaultSprintLengthDays: number
+    workingHoursStart: string
+    workingHoursEnd: string
+    workingDays: string
+    timezone: string
+    requireClockIn: boolean
+  }> = rest
+
+  if (workingDays !== undefined) {
+    dbUpdates.workingDays = serializeWorkingDays(workingDays)
+  }
+
   const [updated] = await db
     .update(organizationSettings)
-    .set({ ...updates, updatedAt: new Date() })
+    .set({ ...dbUpdates, updatedAt: new Date() })
     .where(eq(organizationSettings.organizationId, organizationId))
     .returning()
 

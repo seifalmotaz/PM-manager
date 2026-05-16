@@ -1,6 +1,7 @@
 <script lang="ts">
   import { getOrganization } from '$lib/stores/organization.svelte'
   import { getSessions, startSession, fetchActiveSessions } from '$lib/stores/org-sessions.svelte'
+  import { showToast } from '$lib/stores/toast.svelte'
   import { Play, ChevronDown } from 'lucide-svelte'
   import { clsx } from 'clsx'
 
@@ -24,8 +25,13 @@
   })
 
   async function handleStartForOrg(orgId: string) {
-    isOpen = false
-    await startSession(orgId)
+    try {
+      isOpen = false
+      await startSession(orgId)
+      showToast('Started working session', 'success')
+    } catch (err) {
+      showToast('Failed to start session', 'error')
+    }
   }
 
   // If user has only one org, start directly. If multiple, show picker

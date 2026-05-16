@@ -13,6 +13,12 @@ function parseSessionCookie(cookieHeader: string | null): string | null {
   return match ? match[1] : null
 }
 
+export interface OrgMembershipCache {
+  orgId: string
+  orgName: string
+  cachedAt: Date
+}
+
 export async function createContext(opts: { req: Request; resHeaders: Headers }) {
   const cookieHeader = opts.req.headers.get('Cookie')
   const sessionToken = parseSessionCookie(cookieHeader)
@@ -43,6 +49,7 @@ export async function createContext(opts: { req: Request; resHeaders: Headers })
     req: opts.req,
     resHeaders: opts.resHeaders,
     organizationId, // L0 stub - L1 will populate from WorkOS session
+    orgMemberships: null as Map<string, OrgMembershipCache[]> | null,
   }
 }
 

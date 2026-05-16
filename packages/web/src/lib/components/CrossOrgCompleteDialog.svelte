@@ -2,6 +2,7 @@
   import { trpc } from '$lib/trpc'
   import { fetchAllTasks, fetchOverdueCount } from '$lib/stores/tasks'
   import { fetchActiveSessions } from '$lib/stores/org-sessions.svelte'
+  import { showToast } from '$lib/stores/toast.svelte'
   import { X } from 'lucide-svelte'
 
   let {
@@ -38,6 +39,7 @@
       onClose()
     } catch (err: any) {
       console.error('Auto-create session failed:', err)
+      showToast('Failed to complete task. Please try again.', 'error')
     } finally {
       isProcessing = false
     }
@@ -66,6 +68,7 @@
       onClose()
     } catch (err: any) {
       console.error('Switch session failed:', err)
+      showToast('Failed to switch session. Please try again.', 'error')
     } finally {
       isProcessing = false
     }
@@ -79,7 +82,7 @@
 <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
 <div class="dialog-backdrop" onclick={handleCancel} role="presentation">
   <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-  <div class="dialog" onclick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="dialog-title">
+  <div class="dialog" tabindex="-1" onclick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="dialog-title">
     <div class="dialog-header">
       <h3>Complete cross-org task</h3>
       <button class="close-btn" onclick={handleCancel}>

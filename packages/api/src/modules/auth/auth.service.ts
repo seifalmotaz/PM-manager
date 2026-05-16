@@ -112,7 +112,7 @@ async function exchangeCode(code: string) {
     organizations = []
   }
 
-  return { user, isNew, organizations }
+  return { user, isNew, organizations, workosUserId: workosUser.id }
 }
 
 async function listOrganizations(workosUserId: string) {

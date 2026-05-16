@@ -27,6 +27,7 @@ export const authRouter = router({
         },
         organizations: result.organizations,
         isNew: result.isNew,
+        workosUserId: result.workosUserId,
       }
     }),
 
