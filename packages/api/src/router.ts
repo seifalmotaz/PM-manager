@@ -14,7 +14,6 @@ import { forecastRouter } from './modules/forecast/forecast.router'
 import { organizationRouter } from './modules/organization/organization.router'
 import { orgSessionRouter } from './modules/org-session/org-session.router'
 import { timesheetRouter } from './modules/timesheet/timesheet.router'
-import { repairRouter } from './modules/repair/repair.router'
 
 export const appRouter = router({
   auth: authRouter,
@@ -32,7 +31,6 @@ export const appRouter = router({
   organization: organizationRouter,
   orgSession: orgSessionRouter,
   timesheet: timesheetRouter,
-  repair: repairRouter,
 })
 
 export type AppRouter = typeof appRouter
