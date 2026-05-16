@@ -13,6 +13,12 @@
       "skillPath": "plugins/ideation/skills/execute-spec/SKILL.md",
       "computedHash": "c9594f3937fb562189015955f0ddccec9d150f836010274d80763c127aa05a33"
     },
+    "handoff": {
+      "source": "mattpocock/skills",
+      "sourceType": "github",
+      "skillPath": "skills/productivity/handoff/SKILL.md",
+      "computedHash": "d543685cbfb0c64b7bc51a8dc3465975528da9b64f987f863765973b2f3867ab"
+    },
     "ideation": {
       "source": "nicknisi/claude-plugins",
       "sourceType": "github",
