@@ -3,6 +3,8 @@ import { trpc } from '$lib/trpc'
 import { organization } from './organization.svelte'
 import type { User } from 'shared'
 
+const WORKOS_USER_ID_KEY = 'saha-workos-user-id'
+
 class AuthStore {
 	user = $state<User | null>(null)
 	isLoading = $state(true)
@@ -19,6 +21,7 @@ class AuthStore {
 		this.workosUserId = response.workosUserId
 		organization.setOrganizations(response.organizations)
 		sessionStorage.setItem('workosUserId', response.workosUserId)
+		localStorage.setItem(WORKOS_USER_ID_KEY, response.workosUserId)
 		this.isLoading = false
 		return {
 			isNew: response.isNew,
@@ -44,6 +47,8 @@ class AuthStore {
 		this.user = null
 		this.workosUserId = null
 		sessionStorage.removeItem('workosUserId')
+		localStorage.removeItem('saha-orgs')
+		localStorage.removeItem(WORKOS_USER_ID_KEY)
 		goto('/auth/login')
 	}
 }
