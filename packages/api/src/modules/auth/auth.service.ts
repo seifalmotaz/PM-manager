@@ -1,7 +1,11 @@
 import { WorkOS } from '@workos-inc/node'
+import type { OrganizationMembership } from '@workos-inc/node'
+import { randomBytes } from 'crypto'
 import { db } from '../../db/connection'
-import { users, workspaces, workspaceMembers, organizationSettings, projects } from '../../db/schema'
+import { users, workspaces, workspaceMembers, organizationSettings, projects, sessions } from '../../db/schema'
 import { eq } from 'drizzle-orm'
+
+const SESSION_DURATION_DAYS = 30
 
 const workos = new WorkOS(process.env.WORKOS_API_KEY!, {
   clientId: process.env.WORKOS_CLIENT_ID!,
@@ -48,63 +52,17 @@ async function exchangeCode(code: string) {
   } else {
     isNew = true
 
-    // Create WorkOS personal org first (external API call, outside transaction)
-    const personalOrg = await workos.organizations.createOrganization({
-      name: `${workosUser.firstName ?? ''} ${workosUser.lastName ?? ''}`.trim() + "'s Personal",
-    })
-
-    // DB transaction for user, workspace, and settings
-    user = await db.transaction(async (tx) => {
-      const [newUser] = await tx
-        .insert(users)
-        .values({
-          email: workosUser.email,
-          name: `${workosUser.firstName ?? ''} ${workosUser.lastName ?? ''}`.trim(),
-          avatarUrl: workosUser.profilePictureUrl ?? undefined,
-        })
-        .returning()
-
-      // Auto-create personal workspace with org link
-      const [personalWorkspace] = await tx
-        .insert(workspaces)
-        .values({
-          name: 'Personal',
-          slug: `${newUser.id}-personal`,
-          type: 'personal',
-          createdBy: newUser.id,
-          organizationId: personalOrg.id,
-        })
-        .returning()
-
-      // Create default organization settings
-      await tx.insert(organizationSettings).values({
-        organizationId: personalOrg.id,
+    // Create user only — no automatic org/workspace/project creation
+    const [newUser] = await db
+      .insert(users)
+      .values({
+        email: workosUser.email,
+        name: `${workosUser.firstName ?? ''} ${workosUser.lastName ?? ''}`.trim(),
+        avatarUrl: workosUser.profilePictureUrl ?? undefined,
       })
+      .returning()
 
-      // Add user as owner member
-      await tx.insert(workspaceMembers).values({
-        workspaceId: personalWorkspace.id,
-        userId: newUser.id,
-        role: 'owner',
-      })
-
-      // Create default Inbox project
-      await tx.insert(projects).values({
-        workspaceId: personalWorkspace.id,
-        name: 'Inbox',
-        description: 'Default inbox for quick tasks',
-        color: '#6366f1',
-        isInbox: true,
-      })
-
-      return newUser
-    })
-
-    // Add user to WorkOS organization membership (external API call, after transaction)
-    await workos.userManagement.createOrganizationMembership({
-      userId: workosUser.id,
-      organizationId: personalOrg.id,
-    })
+    user = newUser
   }
 
   // Fetch user's organizations via organization memberships from WorkOS
@@ -114,7 +72,7 @@ async function exchangeCode(code: string) {
       userId: workosUser.id,
     })
 
-    organizations = (memberships.data || []).map((membership: any) => ({
+    organizations = (memberships.data || []).map((membership: OrganizationMembership) => ({
       id: membership.organizationId,
       name: membership.organizationName,
       slug: (membership.organizationName || '').toLowerCase().replace(/\s+/g, '-'),
@@ -148,7 +106,7 @@ async function listOrganizations(workosUserId: string) {
     const memberships = await workos.userManagement.listOrganizationMemberships({
       userId: workosUserId,
     })
-    return (memberships.data || []).map((membership: any) => ({
+    return (memberships.data || []).map((membership: OrganizationMembership) => ({
       id: membership.organizationId,
       name: membership.organizationName,
       slug: (membership.organizationName || '').toLowerCase().replace(/\s+/g, '-'),
@@ -159,4 +117,254 @@ async function listOrganizations(workosUserId: string) {
   }
 }
 
-export const authService = { getAuthorizationUrl, exchangeCode, listOrganizations }
+async function hasOrganization(workosUserId: string): Promise<boolean> {
+  const memberships = await workos.userManagement.listOrganizationMemberships({
+    userId: workosUserId,
+  })
+  return memberships.data.length > 0
+}
+
+interface OrganizationResult {
+  organization: { id: string; name: string }
+  workspace: { id: string; name: string; slug: string; type: string }
+}
+
+async function createPersonalOrganization(
+  userId: string,
+  workosUserId: string,
+  userName: string
+): Promise<OrganizationResult> {
+  // Idempotency check: verify user doesn't already have workspaces (has completed onboarding)
+  const [existingMembership] = await db
+    .select()
+    .from(workspaceMembers)
+    .where(eq(workspaceMembers.userId, userId))
+    .limit(1)
+
+  if (existingMembership) {
+    throw new Error('User has already completed onboarding')
+  }
+
+  let workosOrg: { id: string; name: string } | null = null
+
+  try {
+    // Create WorkOS organization BEFORE transaction (external API call)
+    const newOrg = await workos.organizations.createOrganization({
+      name: `${userName}'s Personal`,
+    })
+    workosOrg = newOrg
+
+    // Start database transaction for local data
+    const [workspace] = await db.transaction(async (tx) => {
+      // Create Saha workspace
+      const [ws] = await tx
+        .insert(workspaces)
+        .values({
+          name: 'Personal',
+          slug: `${userId}-personal`,
+          type: 'personal',
+          organizationId: workosOrg!.id,
+          createdBy: userId,
+        })
+        .returning()
+
+      // Create organization settings with defaults
+      await tx.insert(organizationSettings).values({
+        organizationId: workosOrg!.id,
+      })
+
+      // Create workspace member as owner
+      await tx.insert(workspaceMembers).values({
+        workspaceId: ws.id,
+        userId: userId,
+        role: 'owner',
+      })
+
+      // Create default "Inbox" project
+      await tx.insert(projects).values({
+        workspaceId: ws.id,
+        name: 'Inbox',
+        isInbox: true,
+        color: '#6366f1',
+      })
+
+      return [ws]
+    })
+
+    // Create WorkOS org membership AFTER transaction commits
+    await workos.userManagement.createOrganizationMembership({
+      userId: workosUserId,
+      organizationId: workosOrg!.id,
+    })
+
+    return {
+      organization: { id: workosOrg!.id, name: workosOrg!.name },
+      workspace: {
+        id: workspace.id,
+        name: workspace.name,
+        slug: workspace.slug,
+        type: workspace.type,
+      },
+    }
+  } catch (error) {
+    // Rollback: Delete WorkOS org if it was created
+    if (workosOrg) {
+      try {
+        await workos.organizations.deleteOrganization(workosOrg.id)
+      } catch (cleanupError) {
+        console.error('Failed to cleanup WorkOS org:', cleanupError)
+      }
+    }
+    throw error
+  }
+}
+
+async function createCompanyOrganization(
+  userId: string,
+  workosUserId: string,
+  orgName: string,
+  workspaceName: string
+): Promise<OrganizationResult> {
+  // Idempotency check: verify user doesn't already have workspaces (has completed onboarding)
+  const [existingMembership] = await db
+    .select()
+    .from(workspaceMembers)
+    .where(eq(workspaceMembers.userId, userId))
+    .limit(1)
+
+  if (existingMembership) {
+    throw new Error('User has already completed onboarding')
+  }
+
+  let workosOrg: { id: string; name: string } | null = null
+
+  try {
+    // Create WorkOS organization BEFORE transaction (external API call)
+    const newOrg = await workos.organizations.createOrganization({
+      name: orgName,
+    })
+    workosOrg = newOrg
+
+    // Generate slug from workspace name
+    const slug = workspaceName
+      .toLowerCase()
+      .replace(/\s+/g, '-')
+      .slice(0, 50)
+
+    // Start database transaction for local data
+    const [workspace] = await db.transaction(async (tx) => {
+      // Create Saha workspace
+      const [ws] = await tx
+        .insert(workspaces)
+        .values({
+          name: workspaceName,
+          slug: slug,
+          type: 'company',
+          organizationId: workosOrg!.id,
+          createdBy: userId,
+        })
+        .returning()
+
+      // Create organization settings with defaults
+      await tx.insert(organizationSettings).values({
+        organizationId: workosOrg!.id,
+      })
+
+      // Create workspace member as owner
+      await tx.insert(workspaceMembers).values({
+        workspaceId: ws.id,
+        userId: userId,
+        role: 'owner',
+      })
+
+      // Create default "Inbox" project
+      await tx.insert(projects).values({
+        workspaceId: ws.id,
+        name: 'Inbox',
+        isInbox: true,
+        color: '#6366f1',
+      })
+
+      return [ws]
+    })
+
+    // Create WorkOS org membership AFTER transaction commits
+    await workos.userManagement.createOrganizationMembership({
+      userId: workosUserId,
+      organizationId: workosOrg!.id,
+    })
+
+    return {
+      organization: { id: workosOrg!.id, name: workosOrg!.name },
+      workspace: {
+        id: workspace.id,
+        name: workspace.name,
+        slug: workspace.slug,
+        type: workspace.type,
+      },
+    }
+  } catch (error) {
+    // Rollback: Delete WorkOS org if it was created
+    if (workosOrg) {
+      try {
+        await workos.organizations.deleteOrganization(workosOrg.id)
+      } catch (cleanupError) {
+        console.error('Failed to cleanup WorkOS org:', cleanupError)
+      }
+    }
+    throw error
+  }
+}
+
+async function createSession(userId: string): Promise<string> {
+  const token = randomBytes(32).toString('hex')
+  const expiresAt = new Date()
+  expiresAt.setDate(expiresAt.getDate() + SESSION_DURATION_DAYS)
+
+  await db.insert(sessions).values({
+    token,
+    userId,
+    expiresAt,
+  })
+
+  return token
+}
+
+async function validateSession(token: string): Promise<typeof users.$inferSelect | null> {
+  const [session] = await db
+    .select()
+    .from(sessions)
+    .where(eq(sessions.token, token))
+    .limit(1)
+
+  if (!session) return null
+  if (new Date() > session.expiresAt) {
+    // Clean up expired session
+    await db.delete(sessions).where(eq(sessions.token, token))
+    return null
+  }
+
+  const [user] = await db
+    .select()
+    .from(users)
+    .where(eq(users.id, session.userId))
+    .limit(1)
+
+  return user || null
+}
+
+async function deleteSession(token: string): Promise<void> {
+  await db.delete(sessions).where(eq(sessions.token, token))
+}
+
+export const authService = {
+  getAuthorizationUrl,
+  exchangeCode,
+  listOrganizations,
+  hasOrganization,
+  createPersonalOrganization,
+  createCompanyOrganization,
+  createSession,
+  validateSession,
+  deleteSession,
+}

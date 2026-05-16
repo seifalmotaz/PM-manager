@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { logout } from '$lib/stores/auth.svelte'
+  import { auth } from '$lib/stores/auth.svelte'
 
   $effect(() => {
-    logout()
+    auth.logout()
   })
 </script>
 
@@ -16,6 +16,6 @@
     align-items: center;
     justify-content: center;
     min-height: 100vh;
-    color: var(--muted-text);
+    color: var(--text-muted);
   }
 </style>

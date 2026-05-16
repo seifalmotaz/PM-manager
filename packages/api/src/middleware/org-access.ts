@@ -5,6 +5,7 @@ import { workspaces, workspaceMembers } from '../db/schema'
 import { eq, and, inArray } from 'drizzle-orm'
 import type { Context, OrgMembershipCache } from '../trpc'
 import { WorkOS } from '@workos-inc/node'
+import type { OrganizationMembership } from '@workos-inc/node'
 import { z } from 'zod'
 
 const CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
@@ -75,13 +76,13 @@ async function validateOrgMembership(
       userId: workosUserId,
     })
 
-    const orgIds = memberships.data.map((m: any) => m.organizationId)
+    const orgIds = memberships.data.map((m: OrganizationMembership) => m.organizationId)
     if (!orgIds.includes(organizationId)) {
       throw new TRPCError({ code: 'FORBIDDEN', message: 'Not a member of this organization' })
     }
 
     // Cache memberships
-    membershipsMap.set(userId, memberships.data.map((m: any) => ({
+    membershipsMap.set(userId, memberships.data.map((m: OrganizationMembership) => ({
       orgId: m.organizationId,
       orgName: m.organizationName || '',
       cachedAt: new Date(),

@@ -1,12 +1,12 @@
 <script lang="ts">
-  import { login } from '$lib/stores/auth.svelte'
+  import { auth } from '$lib/stores/auth.svelte'
 </script>
 
 <div class="login-page">
   <main class="login-card">
     <h1 class="brand-title">Saha</h1>
     <p class="subtitle">Project management for the multi-identity worker</p>
-    <button class="login-btn" onclick={login}>
+    <button class="login-btn" onclick={() => auth.login()}>
       Sign in with WorkOS
     </button>
   </main>
@@ -18,7 +18,7 @@
     align-items: center;
     justify-content: center;
     min-height: 100vh;
-    background: var(--bg-color);
+    background: var(--bg-app);
   }
 
   .login-card {
@@ -31,17 +31,17 @@
   .brand-title {
     font-size: 2rem;
     font-weight: 700;
-    color: var(--brand-color);
+    color: var(--brand-primary);
     margin-bottom: 0.5rem;
   }
 
   .subtitle {
-    color: var(--muted-text);
+    color: var(--text-muted);
     margin-bottom: 2rem;
   }
 
   .login-btn {
-    background: var(--brand-color);
+    background: var(--brand-primary);
     color: white;
     border: none;
     border-radius: 0.5rem;

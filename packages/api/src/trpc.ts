@@ -1,7 +1,8 @@
 import { initTRPC, TRPCError } from '@trpc/server'
 import { db } from './db/connection'
-import { users, workspaceMembers, projects, sprints, tasks } from './db/schema'
+import { users, workspaceMembers, projects, sprints, tasks, sessions } from './db/schema'
 import { eq, and } from 'drizzle-orm'
+import { authService } from './modules/auth/auth.service'
 
 /**
  * Parse session cookie from Cookie header string.
@@ -28,16 +29,7 @@ export async function createContext(opts: { req: Request; resHeaders: Headers })
 
   if (sessionToken) {
     try {
-      // Validate UUID format before querying
-      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-      if (uuidRegex.test(sessionToken)) {
-        const result = await db
-          .select()
-          .from(users)
-          .where(eq(users.id, sessionToken))
-          .limit(1)
-        user = result[0] || null
-      }
+      user = await authService.validateSession(sessionToken)
     } catch {
       user = null
     }

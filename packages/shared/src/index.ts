@@ -5,8 +5,8 @@ export interface User {
   email: string
   name: string
   avatarUrl: string | null
-  createdAt: Date
-  updatedAt: Date
+  createdAt?: Date
+  updatedAt?: Date
 }
 
 export type WorkspaceType = 'personal' | 'company'

@@ -5,7 +5,14 @@
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true
+    "forceConsistentCasingInFileNames": true,
+    "baseUrl": ".",
+    "paths": {
+      "$lib/*": ["src/lib/*"],
+      "api/src/router": ["./../api/src/router"],
+      "shared": ["./../shared/src"],
+      "shared/*": ["./../shared/src/*"]
+    }
   },
   "include": ["src/**/*.ts", "src/**/*.svelte", ".svelte-kit/ambient.d.ts"]
 }

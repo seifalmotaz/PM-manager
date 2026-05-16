@@ -7,6 +7,12 @@
       "skillPath": "skills/brainstorming/SKILL.md",
       "computedHash": "8df9b47092524833138b58682d03f2e153a242e550d1693657afdbee0cc9cdb0"
     },
+    "design-handoff": {
+      "source": "anthropics/knowledge-work-plugins",
+      "sourceType": "github",
+      "skillPath": "design/skills/design-handoff/SKILL.md",
+      "computedHash": "3fda0bed51f3aa3ff110cd517388b0b9afa77f6f568700ab9ddbaa5148ae8903"
+    },
     "execute-spec": {
       "source": "nicknisi/claude-plugins",
       "sourceType": "github",
@@ -14,10 +20,10 @@
       "computedHash": "c9594f3937fb562189015955f0ddccec9d150f836010274d80763c127aa05a33"
     },
     "handoff": {
-      "source": "mattpocock/skills",
+      "source": "robertguss/claude-skills",
       "sourceType": "github",
-      "skillPath": "skills/productivity/handoff/SKILL.md",
-      "computedHash": "d543685cbfb0c64b7bc51a8dc3465975528da9b64f987f863765973b2f3867ab"
+      "skillPath": "skills/handoff/SKILL.md",
+      "computedHash": "00b6cefd7caec85a349b7d97f457e6e5e0e53eb5e1e85436e688842687859dd2"
     },
     "ideation": {
       "source": "nicknisi/claude-plugins",

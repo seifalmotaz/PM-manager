@@ -1,9 +1,9 @@
 <script lang="ts">
   import { goto } from '$app/navigation'
   import { page } from '$app/stores'
-  import { handleCallback } from '$lib/stores/auth.svelte'
-  import { getOrganization } from '$lib/stores/organization.svelte'
-
+  import { auth } from '$lib/stores/auth.svelte'
+  import { toast } from '$lib/stores/toast.svelte'
+  
   $effect(() => {
     async function processCallback() {
       const code = $page.url.searchParams.get('code')
@@ -11,19 +11,26 @@
         goto('/auth/login')
         return
       }
+      
       try {
-        await handleCallback(code)
-        const orgState = getOrganization()
-        if (orgState.activeOrganization) {
-          goto(`/${orgState.activeOrganization.slug}`)
+        const { isNew, organizations } = await auth.handleCallback(code)
+        
+        // User needs onboarding if:
+        // 1. They're new, OR
+        // 2. They have no organizations in WorkOS
+        if (isNew || organizations.length === 0) {
+          goto('/auth/onboarding')
         } else {
+          // Returning user with existing org(s)
           goto('/')
         }
-      } catch {
+      } catch (error) {
+        console.error('Auth callback failed:', error)
+        toast.show('Unable to complete sign in. Please try again.', 'error')
         goto('/auth/login?error=auth_failed')
       }
     }
-
+    
     processCallback()
   })
 </script>
@@ -38,6 +45,6 @@
     align-items: center;
     justify-content: center;
     min-height: 100vh;
-    color: var(--muted-text);
+    color: var(--text-muted);
   }
 </style>
