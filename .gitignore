@@ -4,3 +4,5 @@ dist/
 .svelte-kit/
 build/
 .vite/
+docs/
+docs
