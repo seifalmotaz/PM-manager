@@ -3,7 +3,6 @@
 	import TopBar from './TopBar.svelte'
 	import OrganizationBar from './OrganizationBar.svelte'
 	import NavigationSidebar from './NavigationSidebar.svelte'
-	import Timer from '$lib/components/time/Timer.svelte'
 
 	let { children }: { children: Snippet } = $props()
 </script>
@@ -12,11 +11,7 @@
 	<TopBar />
 	<div class="app-body">
 		<OrganizationBar />
-		<NavigationSidebar>
-			<svelte:fragment slot="bottom">
-				<Timer />
-			</svelte:fragment>
-		</NavigationSidebar>
+		<NavigationSidebar />
 		<main class="app-main">
 			{@render children()}
 		</main>

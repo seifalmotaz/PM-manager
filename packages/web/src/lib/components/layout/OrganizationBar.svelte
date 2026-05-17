@@ -1,7 +1,7 @@
 <script lang="ts">
-	import { Home, Plus, User } from 'lucide-svelte'
+	import { goto } from '$app/navigation'
+	import { Home, Plus } from 'lucide-svelte'
 	import { organization } from '$lib/stores/organization.svelte'
-	import { auth } from '$lib/stores/auth.svelte'
 
 	function getInitials(name: string): string {
 		const words = name.trim().split(/\s+/)
@@ -23,25 +23,11 @@
 	function handleOrgClick(org: { id: string; name: string; slug: string }) {
 		organization.setActiveOrganization(org)
 	}
-
-	function getUserInitial(): string {
-		if (!auth.user?.name) return ''
-		const words = auth.user.name.trim().split(/\s+/)
-		if (words.length === 1) {
-			return words[0].charAt(0).toUpperCase()
-		}
-		return words[0].charAt(0).toUpperCase()
-	}
-
-	function getUserColor(): string {
-		if (!auth.user?.name) return 'hsl(0, 0%, 50%)'
-		return getOrgColor(auth.user.name)
-	}
 </script>
 
 <aside class="org-bar">
 	<div class="org-bar-top">
-		<button class="home-btn" title="Saha Home">
+		<button class="home-btn" title="Saha Home" onclick={() => goto('/')}>
 			<div class="home-icon">
 				<Home size={20} strokeWidth={2} />
 			</div>
@@ -68,22 +54,6 @@
 				<Plus size={16} strokeWidth={2.5} />
 			</span>
 		</button>
-	</div>
-
-	<div class="org-bar-bottom">
-		{#if auth.user}
-			{#if auth.user.avatarUrl}
-				<img class="user-avatar" src={auth.user.avatarUrl} alt={auth.user.name ?? 'User'} />
-			{:else}
-				<span class="user-avatar user-initial" style:background-color={getUserColor()}>
-					{getUserInitial()}
-				</span>
-			{/if}
-		{:else}
-			<span class="user-avatar user-icon">
-				<User size={18} strokeWidth={2} />
-			</span>
-		{/if}
 	</div>
 </aside>
 
@@ -198,37 +168,5 @@
 	.org-item:hover .add-icon {
 		border-color: var(--text-main, #ffffff);
 		color: var(--text-main, #ffffff);
-	}
-
-	.org-bar-bottom {
-		width: 100%;
-		display: flex;
-		justify-content: center;
-		padding: 8px 0 4px;
-		margin-top: auto;
-	}
-
-	.user-avatar {
-		width: 32px;
-		height: 32px;
-		border-radius: 50%;
-		object-fit: cover;
-	}
-
-	.user-initial {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		font-size: 12px;
-		font-weight: 600;
-		color: white;
-	}
-
-	.user-icon {
-		background: var(--bg-surface-hover, #363636);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		color: var(--text-muted, #808080);
 	}
 </style>
