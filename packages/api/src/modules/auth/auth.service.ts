@@ -44,6 +44,7 @@ async function exchangeCode(code: string) {
       .set({
         name: `${workosUser.firstName ?? ''} ${workosUser.lastName ?? ''}`.trim(),
         avatarUrl: workosUser.profilePictureUrl ?? undefined,
+        workosUserId: workosUser.id,
         updatedAt: new Date(),
       })
       .where(eq(users.id, existing.id))
@@ -59,6 +60,7 @@ async function exchangeCode(code: string) {
         email: workosUser.email,
         name: `${workosUser.firstName ?? ''} ${workosUser.lastName ?? ''}`.trim(),
         avatarUrl: workosUser.profilePictureUrl ?? undefined,
+        workosUserId: workosUser.id,
       })
       .returning()
 
@@ -67,6 +69,7 @@ async function exchangeCode(code: string) {
 
   // Fetch user's organizations via organization memberships from WorkOS
   let organizations: Array<{ id: string; name: string; slug: string }> = []
+  let orgRoles: Record<string, string> = {}
   try {
     const memberships = await workos.userManagement.listOrganizationMemberships({
       userId: workosUser.id,
@@ -77,6 +80,11 @@ async function exchangeCode(code: string) {
       name: membership.organizationName,
       slug: (membership.organizationName || '').toLowerCase().replace(/\s+/g, '-'),
     }))
+
+    // Extract org roles from memberships
+    for (const membership of memberships.data || []) {
+      orgRoles[membership.organizationId] = membership.role?.slug ?? 'member'
+    }
 
     // Auto-create organization_settings for each org (with defaults)
     for (const org of organizations) {
@@ -98,7 +106,7 @@ async function exchangeCode(code: string) {
     organizations = []
   }
 
-  return { user, isNew, organizations, workosUserId: workosUser.id }
+  return { user, isNew, organizations, orgRoles, workosUserId: workosUser.id }
 }
 
 async function listOrganizations(workosUserId: string) {

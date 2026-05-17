@@ -3,6 +3,9 @@ import { db } from './db/connection'
 import { users, workspaceMembers, projects, sprints, tasks, sessions } from './db/schema'
 import { eq, and } from 'drizzle-orm'
 import { authService } from './modules/auth/auth.service'
+import { WorkOS } from '@workos-inc/node'
+
+const workos = new WorkOS(process.env.WORKOS_API_KEY!, { clientId: process.env.WORKOS_CLIENT_ID! })
 
 /**
  * Parse session cookie from Cookie header string.
@@ -186,3 +189,39 @@ export const adminProcedure = protectedProcedure.use(
     return next()
   }),
 )
+
+/**
+ * Check if the authenticated user is an admin/owner of the given organization via WorkOS.
+ * Throws TRPCError if not authorized. Must be called inside a protectedProcedure resolver.
+ */
+export async function checkOrgAdmin(ctx: Context, organizationId: string) {
+  const workosUserId = ctx.user?.workosUserId
+  if (!workosUserId) {
+    throw new TRPCError({ code: 'UNAUTHORIZED', message: 'WorkOS user ID not found' })
+  }
+
+  try {
+    const memberships = await workos.userManagement.listOrganizationMemberships({
+      userId: workosUserId,
+    })
+    const membership = memberships.data.find((m) => m.organizationId === organizationId)
+    if (!membership) {
+      throw new TRPCError({ code: 'FORBIDDEN', message: 'Not a member of this organization' })
+    }
+
+    const roleData = membership.role
+    let roleSlug = 'member'
+    if (typeof roleData === 'string') {
+      roleSlug = roleData
+    } else if (roleData && typeof roleData === 'object' && 'slug' in roleData) {
+      roleSlug = roleData.slug ?? 'member'
+    }
+    if (roleSlug !== 'admin' && roleSlug !== 'owner') {
+      throw new TRPCError({ code: 'FORBIDDEN', message: 'Admin access required' })
+    }
+  } catch (err) {
+    if (err instanceof TRPCError) throw err
+    console.error('WorkOS role check failed:', err)
+    throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Failed to verify organization role' })
+  }
+}

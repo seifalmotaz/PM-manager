@@ -16,7 +16,7 @@ export const authRouter = router({
       // Create proper session with cryptographic token
       const token = await authService.createSession(result.user.id)
 
-      const cookieValue = `session=${token}; HttpOnly; Path=/; SameSite=None; Secure; Max-Age=2592000`
+      const cookieValue = `session=${token}; HttpOnly; Path=/; SameSite=None; Secure; Domain=.saha.localhost; Max-Age=2592000`
       ctx.resHeaders.set('Set-Cookie', cookieValue)
 
       return {
@@ -27,6 +27,7 @@ export const authRouter = router({
           avatarUrl: result.user.avatarUrl,
         },
         organizations: result.organizations,
+        orgRoles: result.orgRoles,
         isNew: result.isNew,
         workosUserId: result.workosUserId,
       }
@@ -40,6 +41,7 @@ export const authRouter = router({
         email: u.email,
         name: u.name,
         avatarUrl: u.avatarUrl,
+        workosUserId: u.workosUserId,
       },
     }
   }),
@@ -53,7 +55,7 @@ export const authRouter = router({
       await authService.deleteSession(token)
     }
 
-    const cookieValue = 'session=; HttpOnly; Path=/; SameSite=None; Secure; Max-Age=0'
+    const cookieValue = 'session=; HttpOnly; Path=/; SameSite=None; Secure; Domain=.saha.localhost; Max-Age=0'
     ctx.resHeaders.set('Set-Cookie', cookieValue)
     return { success: true }
   }),

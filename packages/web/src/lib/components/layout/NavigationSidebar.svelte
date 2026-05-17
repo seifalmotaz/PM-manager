@@ -1,6 +1,8 @@
 <script lang="ts">
-	import { Home, BarChart3, Folder } from 'lucide-svelte'
+	import { Home, BarChart3, Folder, Plus, ArrowRight } from 'lucide-svelte'
+	import { goto } from '$app/navigation'
 	import { organization } from '$lib/stores/organization.svelte'
+	import { workspace } from '$lib/stores/workspace.svelte'
 	import type { Snippet } from 'svelte'
 
 	let { children, bottom }: { children?: Snippet; bottom?: Snippet } = $props()
@@ -16,6 +18,9 @@
 	function handleNavClick(id: string) {
 		activeNav = id
 	}
+
+	let activeOrg = $derived(organization.activeOrganization)
+	let isAdmin = $derived(activeOrg ? organization.isOrgAdmin(activeOrg.id) : false)
 </script>
 
 <aside class="nav-sidebar">
@@ -41,8 +46,18 @@
 	<div class="nav-separator"></div>
 
 	<div class="nav-section">
-		<span class="section-title">Workspaces</span>
-		<span class="section-hint">Coming soon</span>
+		<div class="section-header">
+			<span class="section-title">Workspaces</span>
+			{#if isAdmin}
+				<button class="add-btn" onclick={() => workspace.openCreateModal()} title="Create workspace">
+					<Plus size={14} strokeWidth={2} />
+				</button>
+			{/if}
+		</div>
+		<button class="nav-item" onclick={() => goto('/workspaces')}>
+			<ArrowRight size={16} strokeWidth={2} />
+			<span class="nav-label">Manage workspaces</span>
+		</button>
 	</div>
 
 	<div class="nav-section">
@@ -141,6 +156,33 @@
 		text-transform: uppercase;
 		letter-spacing: 0.5px;
 		margin-bottom: 4px;
+	}
+
+	.section-header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding-right: 2px;
+	}
+
+	.section-header .section-title {
+		margin-bottom: 0;
+	}
+
+	.add-btn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 20px;
+		height: 20px;
+		border-radius: var(--radius-sm, 4px);
+		color: var(--text-muted, #808080);
+		transition: color 0.15s ease, background-color 0.15s ease;
+	}
+
+	.add-btn:hover {
+		color: var(--text-main, #ffffff);
+		background: var(--bg-surface-hover, #363636);
 	}
 
 	.section-hint {

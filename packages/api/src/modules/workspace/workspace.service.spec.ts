@@ -103,6 +103,11 @@ describe('workspaceService', () => {
         }
       }
     })
+
+    test('filters by organizationId', async () => {
+      const result = await workspaceService.listUserWorkspaces(testUserId, 'org_test_123')
+      expect(result.every((ws) => ws.organizationId === 'org_test_123')).toBe(true)
+    })
   })
 
   describe('getWorkspace', () => {
@@ -129,10 +134,11 @@ describe('workspaceService', () => {
     let createdWorkspaceId: string
 
     test('creates workspace and adds creator as owner member', async () => {
-      const ws = await workspaceService.createCompanyWorkspace('Test Company', testUserId)
+      const ws = await workspaceService.createCompanyWorkspace('Test Company', testUserId, 'org_test_123')
       expect(ws.name).toBe('Test Company')
       expect(ws.type).toBe('company')
       expect(ws.slug).toMatch(/^test-company-\d+$/)
+      expect(ws.organizationId).toBe('org_test_123')
       createdWorkspaceId = ws.id
 
       // Verify creator is a member with role 'owner'
@@ -191,6 +197,33 @@ describe('workspaceService', () => {
     test('throws when user is not a workspace member', async () => {
       await expect(
         workspaceService.listMembers(testWorkspaceId, testUser3Id),
+      ).rejects.toThrow()
+    })
+  })
+
+  describe('updateWorkspace', () => {
+    let updateTestWorkspaceId: string
+
+    beforeAll(async () => {
+      const ws = await workspaceService.createCompanyWorkspace('Update Test Workspace', testUserId, 'org_test_456')
+      updateTestWorkspaceId = ws.id
+    })
+
+    afterAll(async () => {
+      if (updateTestWorkspaceId) {
+        await db.delete(workspaceMembers).where(eq(workspaceMembers.workspaceId, updateTestWorkspaceId))
+        await db.delete(workspaces).where(eq(workspaces.id, updateTestWorkspaceId))
+      }
+    })
+
+    test('updates workspace name', async () => {
+      const updated = await workspaceService.updateWorkspace(updateTestWorkspaceId, testUserId, { name: 'Updated Name' })
+      expect(updated.name).toBe('Updated Name')
+    })
+
+    test('throws when user is not a member', async () => {
+      await expect(
+        workspaceService.updateWorkspace(updateTestWorkspaceId, testUser3Id, { name: 'Should Fail' }),
       ).rejects.toThrow()
     })
   })

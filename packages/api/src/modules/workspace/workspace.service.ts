@@ -4,7 +4,7 @@ import { eq, and, count, sql } from 'drizzle-orm'
 import { createAuditLog } from '../../shared/audit/audit.service'
 import { TRPCError } from '@trpc/server'
 
-async function listUserWorkspaces(userId: string) {
+async function listUserWorkspaces(userId: string, organizationId?: string) {
   const rows = await db
     .select({
       id: workspaces.id,
@@ -25,7 +25,14 @@ async function listUserWorkspaces(userId: string) {
       workspaceMembers,
       eq(workspaceMembers.workspaceId, workspaces.id),
     )
-    .where(eq(workspaceMembers.userId, userId))
+    .where(
+      organizationId
+        ? and(
+            eq(workspaceMembers.userId, userId),
+            eq(workspaces.organizationId, organizationId),
+          )
+        : eq(workspaceMembers.userId, userId),
+    )
 
   return rows
 }
@@ -82,12 +89,12 @@ async function listMembers(workspaceId: string, userId: string) {
   }))
 }
 
-async function createCompanyWorkspace(name: string, userId: string) {
+async function createCompanyWorkspace(name: string, userId: string, organizationId: string) {
   const slug = name.toLowerCase().replace(/\s+/g, '-') + '-' + Date.now()
 
   const [workspace] = await db
     .insert(workspaces)
-    .values({ name, slug, type: 'company', createdBy: userId })
+    .values({ name, slug, type: 'company', createdBy: userId, organizationId })
     .returning()
 
   await db.insert(workspaceMembers).values({
@@ -142,10 +149,26 @@ async function removeMember(workspaceId: string, memberUserId: string, actorUser
   })
 }
 
+async function updateWorkspace(workspaceId: string, userId: string, updates: { name?: string }) {
+  await getWorkspace(workspaceId, userId)
+
+  const [workspace] = await db
+    .update(workspaces)
+    .set({
+      name: updates.name,
+      updatedAt: new Date(),
+    })
+    .where(eq(workspaces.id, workspaceId))
+    .returning()
+
+  return workspace
+}
+
 export const workspaceService = {
   listUserWorkspaces,
   getWorkspace,
   listMembers,
   createCompanyWorkspace,
   removeMember,
+  updateWorkspace,
 }
