@@ -6,6 +6,7 @@
 	import { workspace } from '$lib/stores/workspace.svelte'
 	import { project } from '$lib/stores/project.svelte'
 	import { auth } from '$lib/stores/auth.svelte'
+	import CreateWorkspaceModal from '$lib/components/workspaces/CreateWorkspaceModal.svelte'
 
 	function getInitials(name: string): string {
 		const words = name.trim().split(/\s+/)
@@ -128,6 +129,18 @@
 	function truncateText(text: string, maxLength: number): string {
 		if (text.length <= maxLength) return text
 		return text.slice(0, maxLength - 1) + '…'
+	}
+
+	function handleCreateWorkspace(name: string) {
+		const activeOrg = organization.activeOrganization
+		if (activeOrg) {
+			workspace.createWorkspace(name, activeOrg.id)
+			workspace.closeCreateModal()
+		}
+	}
+
+	function handleCloseCreateModal() {
+		workspace.closeCreateModal()
 	}
 </script>
 
@@ -275,6 +288,13 @@
 		</div>
 	</div>
 </aside>
+
+<CreateWorkspaceModal
+	isOpen={workspace.showCreateModal}
+	isLoading={workspace.isCreating}
+	onClose={handleCloseCreateModal}
+	onSubmit={handleCreateWorkspace}
+/>
 
 <style>
 	.nav-sidebar {

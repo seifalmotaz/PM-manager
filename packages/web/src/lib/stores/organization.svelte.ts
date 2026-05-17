@@ -64,6 +64,13 @@ class OrganizationStore {
 		return role === 'admin' || role === 'owner'
 	}
 
+	addOrganization(org: Organization, role: string) {
+		this.organizations = [...this.organizations, org]
+		this.orgRoles[org.id] = role
+		this.setActiveOrganization(org)
+		this.saveToStorage()
+	}
+
 	getOrganization() {
 		return { activeOrganization: this.activeOrganization }
 	}

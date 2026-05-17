@@ -2,6 +2,10 @@
 	import { goto } from '$app/navigation'
 	import { Home, Plus } from 'lucide-svelte'
 	import { organization } from '$lib/stores/organization.svelte'
+	import CreateOrganizationModal from '$lib/components/organizations/CreateOrganizationModal.svelte'
+	import { trpc } from '$lib/trpc'
+	import { toast } from '$lib/stores/toast.svelte'
+	import type { Organization } from '$lib/stores/organization.svelte'
 
 	function getInitials(name: string): string {
 		const words = name.trim().split(/\s+/)
@@ -22,6 +26,39 @@
 
 	function handleOrgClick(org: { id: string; name: string; slug: string }) {
 		organization.setActiveOrganization(org)
+	}
+
+	let showCreateModal = $state(false)
+	let isCreating = $state(false)
+
+	function openCreateModal() {
+		showCreateModal = true
+	}
+
+	function closeCreateModal() {
+		showCreateModal = false
+	}
+
+	async function handleCreateOrg(name: string) {
+		isCreating = true
+		try {
+			const result = await trpc.organization.create.mutate({ orgName: name })
+
+			const newOrg: Organization = {
+				id: result.organization.id,
+				name: result.organization.name,
+				slug: result.organization.name.toLowerCase().replace(/\s+/g, '-'),
+			}
+
+			organization.addOrganization(newOrg, 'admin')
+			toast.show('Organization created!', 'success')
+			closeCreateModal()
+		} catch (error) {
+			console.error('Failed to create organization:', error)
+			toast.show('Failed to create organization', 'error')
+		} finally {
+			isCreating = false
+		}
 	}
 </script>
 
@@ -49,13 +86,20 @@
 			</button>
 		{/each}
 
-		<button class="org-item add-org" title="Add Organization">
+		<button class="org-item add-org" title="Add Organization" onclick={openCreateModal}>
 			<span class="org-avatar add-icon">
 				<Plus size={16} strokeWidth={2.5} />
 			</span>
 		</button>
 	</div>
 </aside>
+
+<CreateOrganizationModal
+	isOpen={showCreateModal}
+	isLoading={isCreating}
+	onClose={closeCreateModal}
+	onSubmit={handleCreateOrg}
+/>
 
 <style>
 	.org-bar {

@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { router, protectedProcedure } from '../../trpc'
 import { organizationService } from './organization.service'
 import { workspaceService } from '../workspace/workspace.service'
+import { TRPCError } from '@trpc/server'
 
 export const organizationRouter = router({
   list: protectedProcedure.query(async ({ ctx }) => {
@@ -46,5 +47,19 @@ export const organizationRouter = router({
     .mutation(async ({ input }) => {
       const { organizationId, ...updates } = input
       return organizationService.updateSettings(organizationId, updates)
+    }),
+
+  create: protectedProcedure
+    .input(z.object({ orgName: z.string().min(1).max(100) }))
+    .mutation(async ({ ctx, input }) => {
+      if (!ctx.user.workosUserId) {
+        throw new TRPCError({ code: 'UNAUTHORIZED', message: 'WorkOS user ID not found' })
+      }
+      const result = await organizationService.createOrganization(
+        ctx.user.id,
+        ctx.user.workosUserId,
+        input.orgName
+      )
+      return result
     }),
 })
