@@ -477,7 +477,7 @@ async function deleteTask(id: string, userId: string) {
   await db.delete(tasks).where(eq(tasks.id, id))
 }
 
-async function listHome(workspaceIds: string[], userId: string) {
+async function listHome(workspaceIds: string[], userId: string, assigneeId?: string) {
   // Note: userId is available for future use (e.g., filtering by assigned tasks)
   void userId
 
@@ -493,6 +493,13 @@ async function listHome(workspaceIds: string[], userId: string) {
 
   if (projectIds.length === 0) return []
 
+  const conditions: any[] = []
+  conditions.push(inArray(tasks.projectId, projectIds))
+
+  if (assigneeId !== undefined) {
+    conditions.push(eq(tasks.assigneeId, assigneeId))
+  }
+
   const rows = await db
     .select({
       task: tasks,
@@ -500,7 +507,7 @@ async function listHome(workspaceIds: string[], userId: string) {
     })
     .from(tasks)
     .leftJoin(projects, eq(tasks.projectId, projects.id))
-    .where(inArray(tasks.projectId, projectIds))
+    .where(conditions.length > 0 ? and(...conditions) : undefined)
     .orderBy(asc(tasks.createdAt))
 
   return rows.map(row => ({

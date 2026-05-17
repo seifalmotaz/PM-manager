@@ -1,23 +1,18 @@
 <script lang="ts">
 	import { Plus } from 'lucide-svelte'
-	import TaskCard from '$lib/components/tasks/TaskCard.svelte'
-
-	interface TaskItem {
-		id: string
-		title: string
-		priority: 'P0' | 'P1' | 'P2' | 'P3'
-		project: string
-		dueDate: string
-		overdue?: boolean
-	}
+	import type { Task } from '$lib/stores/task.svelte'
+	import ProjectTaskCard from '$lib/components/tasks/ProjectTaskCard.svelte'
 
 	interface Props {
 		title: string
-		tasks: TaskItem[]
+		tasks: Task[]
 		accentColor?: string
+		showAddButton?: boolean
+		onSelectTask?: (taskId: string) => void
+		onMoveTask?: (taskId: string, targetStatus: 'todo' | 'in_progress' | 'done') => void
 	}
 
-	let { title, tasks, accentColor }: Props = $props()
+	let { title, tasks, accentColor, showAddButton = true, onSelectTask = undefined, onMoveTask = undefined }: Props = $props()
 </script>
 
 <div class="kanban-column">
@@ -33,20 +28,22 @@
 
 	<div class="task-list">
 		{#each tasks as task (task.id)}
-			<TaskCard
-				title={task.title}
-				priority={task.priority}
-				project={task.project}
-				dueDate={task.dueDate}
-				overdue={task.overdue}
+			<ProjectTaskCard
+				{task}
+				onClick={() => onSelectTask?.(task.id)}
+				onMoveToStatus={onMoveTask
+					? (status) => onMoveTask?.(task.id, status)
+					: undefined}
 			/>
 		{/each}
 	</div>
 
-	<button class="add-task-btn">
-		<Plus size={16} strokeWidth={2} />
-		<span>Add task</span>
-	</button>
+	{#if showAddButton}
+		<button class="add-task-btn">
+			<Plus size={16} strokeWidth={2} />
+			<span>Add task</span>
+		</button>
+	{/if}
 </div>
 
 <style>

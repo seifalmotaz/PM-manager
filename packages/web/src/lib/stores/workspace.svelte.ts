@@ -13,8 +13,18 @@ export interface Workspace {
 	updatedAt: string
 }
 
+export interface WorkspaceMember {
+	id: string
+	workspaceId: string
+	userId: string
+	role: string
+	joinedAt: string
+	user: { id: string; name: string; email: string; avatarUrl: string | null }
+}
+
 class WorkspaceStore {
 	workspaces = $state<Workspace[]>([])
+	members = $state<WorkspaceMember[]>([])
 	isLoading = $state(false)
 	isCreating = $state(false)
 	isUpdating = $state(false)
@@ -31,6 +41,20 @@ class WorkspaceStore {
 			this.workspaces = result as Workspace[]
 		} catch (err) {
 			this.error = err instanceof Error ? err.message : 'Failed to load workspaces'
+			toast.show(this.error, 'error')
+		} finally {
+			this.isLoading = false
+		}
+	}
+
+	async loadMembers(workspaceId: string) {
+		this.isLoading = true
+		this.error = null
+		try {
+			const result = await trpc.workspace.members.query({ workspaceId })
+			this.members = result as WorkspaceMember[]
+		} catch (err) {
+			this.error = err instanceof Error ? err.message : 'Failed to load members'
 			toast.show(this.error, 'error')
 		} finally {
 			this.isLoading = false

@@ -1,5 +1,9 @@
 ## Agent skills
 
+### Agent Handoff
+
+Always read the related files from last sessions of handoffs from `.agents/handoffs` directory.
+
 ### Issue tracker
 
 Issues are tracked as local markdown files under `.scratch/`. See `docs/agents/issue-tracker.md`.

@@ -1,37 +1,24 @@
 <script lang="ts">
 	import KanbanColumn from './KanbanColumn.svelte'
+	import type { Task } from '$lib/stores/task.svelte'
 
-	interface TaskItem {
-		id: string
-		title: string
-		priority: 'P0' | 'P1' | 'P2' | 'P3'
-		project: string
-		dueDate: string
-		overdue?: boolean
+	interface Props {
+		tasks: Task[]
+		onSelectTask: (taskId: string) => void
+		onMoveTask: (taskId: string, targetStatus: 'todo' | 'in_progress' | 'done') => void
 	}
 
-	const todoTasks: TaskItem[] = [
-		{ id: '1', title: 'Fix login bug', priority: 'P1', project: 'Backend', dueDate: 'Today' },
-		{ id: '2', title: 'Write API spec', priority: 'P2', project: 'Backend', dueDate: 'Tomorrow' },
-		{ id: '3', title: 'Update dependencies', priority: 'P3', project: 'DevOps', dueDate: 'Today' },
-		{ id: '4', title: 'Document onboarding', priority: 'P3', project: 'Docs', dueDate: 'Next week' }
-	]
+	let { tasks, onSelectTask, onMoveTask }: Props = $props()
 
-	const inProgressTasks: TaskItem[] = [
-		{ id: '5', title: 'Sprint planning', priority: 'P2', project: 'Backend', dueDate: 'Friday' },
-		{ id: '6', title: 'Code review: auth PR', priority: 'P1', project: 'Backend', dueDate: 'Today' }
-	]
-
-	const doneTasks: TaskItem[] = [
-		{ id: '7', title: 'Deploy to staging', priority: 'P0', project: 'DevOps', dueDate: 'Today' },
-		{ id: '8', title: 'Design review', priority: 'P0', project: 'Frontend', dueDate: 'Yesterday', overdue: true }
-	]
+	let todoTasks = $derived(tasks.filter(t => t.status === 'todo'))
+	let inProgressTasks = $derived(tasks.filter(t => t.status === 'in_progress'))
+	let doneTasks = $derived(tasks.filter(t => t.status === 'done'))
 </script>
 
 <div class="kanban-board">
-	<KanbanColumn title="To Do" tasks={todoTasks} accentColor="#808080" />
-	<KanbanColumn title="In Progress" tasks={inProgressTasks} accentColor="#db4c3f" />
-	<KanbanColumn title="Done" tasks={doneTasks} accentColor="#4caf50" />
+	<KanbanColumn title="To Do" tasks={todoTasks} accentColor="#808080" showAddButton={false} {onSelectTask} {onMoveTask} />
+	<KanbanColumn title="In Progress" tasks={inProgressTasks} accentColor="#db4c3f" showAddButton={false} {onSelectTask} {onMoveTask} />
+	<KanbanColumn title="Done" tasks={doneTasks} accentColor="#4caf50" showAddButton={false} {onSelectTask} {onMoveTask} />
 </div>
 
 <style>

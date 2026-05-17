@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { Home, BarChart3, Folder, Plus, ArrowRight } from 'lucide-svelte'
 	import { goto } from '$app/navigation'
+	import { page } from '$app/stores'
 	import { organization } from '$lib/stores/organization.svelte'
 	import { workspace } from '$lib/stores/workspace.svelte'
 	import type { Snippet } from 'svelte'
@@ -13,10 +14,18 @@
 		{ id: 'projects', label: 'Projects', icon: Folder }
 	]
 
-	let activeNav = $state('home')
+	let activeNav = $derived.by(() => {
+		const path = $page.url.pathname
+		if (path === '/' || path.startsWith('/home')) return 'home'
+		if (path.startsWith('/velocity')) return 'velocity'
+		if (path.startsWith('/projects')) return 'projects'
+		return ''
+	})
 
 	function handleNavClick(id: string) {
-		activeNav = id
+		if (id === 'home') goto('/')
+		if (id === 'velocity') goto('/velocity')
+		if (id === 'projects') goto('/projects')
 	}
 
 	let activeOrg = $derived(organization.activeOrganization)
@@ -58,11 +67,6 @@
 			<ArrowRight size={16} strokeWidth={2} />
 			<span class="nav-label">Manage workspaces</span>
 		</button>
-	</div>
-
-	<div class="nav-section">
-		<span class="section-title">Projects</span>
-		<span class="section-hint">Coming soon</span>
 	</div>
 
 	<div class="nav-bottom">

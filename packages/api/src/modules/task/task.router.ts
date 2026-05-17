@@ -93,10 +93,11 @@ export const taskRouter = router({
     .input(
       z.object({
         workspaceIds: z.array(z.string().uuid()),
+        assigneeId: z.string().uuid().optional(),
       }),
     )
     .query(({ input, ctx }) => {
-      return taskService.listHome(input.workspaceIds, ctx.user.id)
+      return taskService.listHome(input.workspaceIds, ctx.user.id, input.assigneeId)
     }),
 
   homeWithOrganization: protectedProcedure
