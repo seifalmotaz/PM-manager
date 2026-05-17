@@ -117,7 +117,24 @@ async function getTask(id: string, userId: string): Promise<TaskRow> {
 
 async function createTask(input: CreateTaskInput, userId: string) {
   // Verify project access
-  await projectService.getProject(input.projectId, userId)
+  const project = await projectService.getProject(input.projectId, userId)
+
+  // Auto-assign to current user if solo workspace and no explicit assignee
+  if (!input.assigneeId) {
+    try {
+      const members = await db
+        .select({ userId: workspaceMembers.userId })
+        .from(workspaceMembers)
+        .where(eq(workspaceMembers.workspaceId, project.workspaceId))
+
+      if (members.length === 1 && members[0].userId === userId) {
+        input.assigneeId = userId
+      }
+    } catch {
+      // Silently ignore DB failures - fall through with unassigned behavior
+      console.debug('[createTask] Auto-assign member query failed, falling back to unassigned')
+    }
+  }
 
   // Sprint lock enforcement
   if (input.sprintId) {
